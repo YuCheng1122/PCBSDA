@@ -6,13 +6,13 @@ import os
 from collections import Counter
 from torch_geometric.loader import DataLoader
 
-from ours.src.gnn.utils import (
+from src.gnn.utils import (
     load_single_arch_data, load_cross_arch_data, train_epoch, evaluate,
     create_gnn_scheduler, test_model, plot_training_curves,
     save_experiment_results, load_test_data_by_arch
 )
-from ours.src.gnn.models import GCN, GAT
-from ours.configs.gnn.baseline import get_gnn_config
+from src.gnn.models import GCN, GAT
+from configs.gnn.baseline import get_gnn_config
 
 
 def set_random_seed(seed):

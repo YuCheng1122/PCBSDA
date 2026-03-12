@@ -7,9 +7,9 @@ import torch
 from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
-from ours.configs.ccsa.baseline import get_ccsa_config
-from ours.src.gnn.models import GCN
-from ours.src.transfer_learning.ccsa.utils import (
+from configs.ccsa.baseline import get_ccsa_config
+from src.gnn.models import GCN
+from src.transfer_learning.ccsa.utils import (
     prepare_ccsa_data, CCSAPairDataset, ccsa_pair_collate_fn,
     train_ccsa_epoch, evaluate, test_model,
     plot_training_curves, save_experiment_results

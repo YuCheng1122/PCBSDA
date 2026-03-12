@@ -4,10 +4,10 @@ import math
 from datasets import load_from_disk
 from transformers import RobertaConfig, TrainerCallback
 
-from ours.src.embedding.roberta.utils import load_corpus_dataset, setup_training_environment
-from ours.configs.embedding.roberta.pretrain import get_pretrain_config
-from ours.src.embedding.roberta.tokenizer import build_vocab_from_dataset, create_wordlevel_tokenizer
-from ours.src.embedding.roberta.models import init_pretrain_components, create_model
+from src.embedding.roberta.utils import load_corpus_dataset, setup_training_environment
+from configs.embedding.roberta.pretrain import get_pretrain_config
+from src.embedding.roberta.tokenizer import build_vocab_from_dataset, create_wordlevel_tokenizer
+from src.embedding.roberta.models import init_pretrain_components, create_model
 
 
 class LossTrackingCallback(TrainerCallback):

@@ -1,6 +1,6 @@
 def get_pretrain_config():
     MAX_LENGTH = 512
-    BASE_PATH = "/home/tommy/Project/PcodeBERT"
+    BASE_PATH = "/home/tommy/Project/PCBSDA"
 
     config = {
         # Model architecture (vocab_size and model_config will be set dynamically)
@@ -12,10 +12,10 @@ def get_pretrain_config():
         "intermediate_size": 1024,
 
         # Data paths
-        "corpus_path": f"{BASE_PATH}/outputs/preprocessed/pcode_corpus_x86_64_new_data.pkl",
-        "output_dir": f"{BASE_PATH}/outputs/models/pretrain_new_200",
-        "tokenizer_output_dir": f"{BASE_PATH}/outputs/tokenizer_new_data",
-        "checkpoint_dir": f"{BASE_PATH}/checkpoints",
+        "corpus_path": f"{BASE_PATH}/ours/outputs/embedding/corpus_Advanced Micro Devices x86-64.pkl",
+        "output_dir": f"{BASE_PATH}/ours/outputs/models/embedding/roberta/",
+        "tokenizer_output_dir": f"{BASE_PATH}/ours/outputs/tokenizer/roberta/",
+        "checkpoint_dir": f"{BASE_PATH}/ours/outputs/checkpoints/embedding/roberta/",
 
         # Training parameters
         "epochs": 100,
