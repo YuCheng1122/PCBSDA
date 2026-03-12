@@ -1,3 +1,4 @@
+import os
 import pickle
 from gensim.models import Word2Vec
 from pathlib import Path
@@ -71,6 +72,7 @@ if __name__ == "__main__":
     )
 
     output_path = cfg["output_path"]
+    os.makedirs(output_path, exist_ok=True)
     model.save(output_path + cfg["model_filename"])
     model.wv.save(output_path + cfg["vectors_filename"])
 
