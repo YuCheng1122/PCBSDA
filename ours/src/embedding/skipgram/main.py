@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Union
 from datasets import Dataset
 
-from configs.embedding.skipgram.train import get_skipgram_config
+from ours.configs.embedding.skipgram.train import get_skipgram_config
 
 def load_corpus_dataset(corpus_path: Union[str, Path]) -> Dataset:
     corpus_path = Path(corpus_path)
