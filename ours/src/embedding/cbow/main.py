@@ -5,7 +5,7 @@ from typing import Union
 from datasets import Dataset
 from datasets import load_from_disk
 
-from configs.embedding.cbow.train import get_cbow_config
+from ours.configs.embedding.cbow.train import get_cbow_config
 
 def load_corpus_dataset(corpus_path: Union[str, Path]) -> Dataset:
     corpus_path = Path(corpus_path)
