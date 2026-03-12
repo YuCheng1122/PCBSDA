@@ -141,7 +141,9 @@ def load_cross_arch_data(csv_path, graph_dir, source_cpus, target_cpus, cache_fi
 def load_graphs_from_df(df, graph_dir, classification=False):
     LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "outputs", "logs")
     os.makedirs(LOG_DIR, exist_ok=True)
-    log_path = os.path.join(LOG_DIR, "skipped_files.log")
+    # 用 graph_dir 最後一層目錄名區分不同 embedding method 的 log
+    method_tag = os.path.basename(graph_dir.rstrip('/'))
+    log_path = os.path.join(LOG_DIR, f"skipped_files_{method_tag}.log")
 
     graphs = []
     labels = []

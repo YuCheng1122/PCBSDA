@@ -1,9 +1,8 @@
-
 import os
 
 from transformers import (
     RobertaForMaskedLM,
-    Trainer, 
+    Trainer,
     TrainingArguments,
     DataCollatorForLanguageModeling
 )
@@ -13,7 +12,7 @@ def create_model(config):
     print("Model initialized successfully, number of parameters:", sum(p.numel() for p in model.parameters()))
     return model
 
-def init_pretrain_components(config, model, tokenizer, dataset):
+def init_pretrain_components(config, model, tokenizer, train_dataset, eval_dataset=None):
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=True,
@@ -24,7 +23,7 @@ def init_pretrain_components(config, model, tokenizer, dataset):
     os.makedirs(config["checkpoint_dir"], exist_ok=True)
 
     training_args = TrainingArguments(
-        output_dir=config["checkpoint_dir"], 
+        output_dir=config["checkpoint_dir"],
         overwrite_output_dir=True,
         num_train_epochs=config["epochs"],
         per_device_train_batch_size=config["batch_size"],
@@ -34,15 +33,17 @@ def init_pretrain_components(config, model, tokenizer, dataset):
         logging_dir=f'{config["checkpoint_dir"]}/logs',
         logging_steps=config["logging_steps"],
         prediction_loss_only=True,
-        lr_scheduler_type="linear", 
-        warmup_steps=10000,
+        lr_scheduler_type="linear",
+        warmup_steps=config["warmup_steps"],
+        # Eval settings
+        eval_strategy="epoch" if eval_dataset else "no",
     )
 
-    # Initialize trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         data_collator=data_collator,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
     )
     return trainer

@@ -3,57 +3,63 @@ from tokenizers.models import WordLevel
 from transformers import PreTrainedTokenizerFast
 import os
 
-def create_wordlevel_tokenizer(vocab_path, output_path, special_tokens, max_length):
+
+def build_vocab_from_dataset(dataset, special_tokens):
+    """Scan dataset to collect unique tokens and build vocab dict."""
+    special_token_list = [
+        special_tokens["unk_token"],
+        special_tokens["pad_token"],
+        special_tokens["cls_token"],
+        special_tokens["sep_token"],
+        special_tokens["mask_token"],
+    ]
+
+    unique_tokens = set()
+    for example in dataset:
+        unique_tokens.update(example["text"].split())
+
+    # Special tokens first, then sorted corpus tokens
+    vocab = {tok: i for i, tok in enumerate(special_token_list)}
+    for tok in sorted(unique_tokens):
+        if tok not in vocab:
+            vocab[tok] = len(vocab)
+
+    print(f"Vocab built: {len(vocab)} tokens ({len(special_token_list)} special + {len(vocab) - len(special_token_list)} corpus tokens)")
+    return vocab
+
+
+def create_wordlevel_tokenizer(vocab, special_tokens, max_length, save_dir=None):
     """
-    Create a WordLevel tokenizer for Pcode instructions.
-    
+    Create a WordLevel tokenizer from a vocab dict.
+
     Args:
-        vocab_path: Path to vocabulary file (one token per line)
-        output_path: Path to save the tokenizer configuration
-        
+        vocab: dict mapping token -> id
+        special_tokens: dict with unk_token, pad_token, cls_token, sep_token, mask_token
+        max_length: max sequence length
+        save_dir: optional directory to save tokenizer
+
     Returns:
-        tokenizer: Configured Tokenizer instance
+        PreTrainedTokenizerFast
     """
-
-    tokenizer_dir = os.path.dirname(output_path)
-    tokenizer_file = os.path.basename(output_path)
-    print(f"Tokenizer file: {tokenizer_file}, Directory: {tokenizer_dir}")
-
-    if os.path.exists(output_path):
-        print(f"Loading existing tokenizer from {output_path}")
-        fast_tokenizer = PreTrainedTokenizerFast(
-            tokenizer_file=tokenizer_file,
-            model_max_length=max_length,
-            **special_tokens
-        )
-        return fast_tokenizer
-
-    if not os.path.exists(vocab_path):
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-    
-    with open(vocab_path, 'r', encoding='utf-8') as f:
-        vocab = {token.strip(): i for i, token in enumerate(f.readlines())}
-
-    print(f"Successfully loaded {len(vocab)} tokens from {vocab_path}.")
-
-    tokenizer = Tokenizer(WordLevel(vocab, unk_token="[UNK]"))
+    tokenizer = Tokenizer(WordLevel(vocab, unk_token=special_tokens["unk_token"]))
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     tokenizer.post_processor = processors.TemplateProcessing(
         single=f"{special_tokens['cls_token']} $A {special_tokens['sep_token']}",
         special_tokens=[
-            (special_tokens['cls_token'], vocab[special_tokens['cls_token']]),
-            (special_tokens['sep_token'], vocab[special_tokens['sep_token']])
+            (special_tokens["cls_token"], vocab[special_tokens["cls_token"]]),
+            (special_tokens["sep_token"], vocab[special_tokens["sep_token"]]),
         ],
     )
 
-    os.makedirs(tokenizer_dir, exist_ok=True)
-    
     fast_tokenizer = PreTrainedTokenizerFast(
         tokenizer_object=tokenizer,
         model_max_length=max_length,
-        **special_tokens
+        **special_tokens,
     )
 
-    fast_tokenizer.save_pretrained(tokenizer_dir)
-    return fast_tokenizer
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        fast_tokenizer.save_pretrained(save_dir)
+        print(f"Tokenizer saved to {save_dir}")
 
+    return fast_tokenizer

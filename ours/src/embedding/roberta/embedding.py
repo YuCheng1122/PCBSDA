@@ -10,11 +10,15 @@ import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Paths
+MODEL_PATH = "/home/tommy/Project/PcodeBERT/outputs/models/RoBERTa/model_epoch_25"
+GRAPH_INPUT_DIR = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered"
+GRAPH_OUTPUT_DIR = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered_temp"
 
 
 def load_pretrained_model():
     """載入預訓練的模型和tokenizer"""
-    model_path = "/home/tommy/Project/PcodeBERT/outputs/models/RoBERTa/model_epoch_25"
+    model_path = MODEL_PATH
     
     print(f"Loading model from: {model_path}")
     
@@ -48,7 +52,8 @@ def get_embeddings_batch(sentences, model, tokenizer, device, batch_size=1000):
         
         with torch.no_grad():
             outputs = model.roberta(**inputs)
-            embeddings = outputs.last_hidden_state[:, 0, :]
+            attention_mask = inputs['attention_mask'].unsqueeze(-1)
+            embeddings = (outputs.last_hidden_state * attention_mask).sum(1) / attention_mask.sum(1)
             print(f"\nEmbedding stats:")
             print(f"  Mean: {embeddings.mean().item():.6f}")
             print(f"  Std: {embeddings.std().item():.6f}")
@@ -173,16 +178,12 @@ def batch_process_graphs(base_path, output_base_dir):
     print(f"Stats saved to: {stats_path}")
 
 def main():
-    # 設定路徑
-    base_path = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered"
-    output_dir = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered_temp"
-    
     print(f"Starting batch processing...")
-    print(f"Input directory: {base_path}")
-    print(f"Output directory: {output_dir}")
+    print(f"Input directory: {GRAPH_INPUT_DIR}")
+    print(f"Output directory: {GRAPH_OUTPUT_DIR}")
     
     # 批量處理
-    batch_process_graphs(base_path, output_dir)
+    batch_process_graphs(GRAPH_INPUT_DIR, GRAPH_OUTPUT_DIR)
 
 if __name__ == "__main__":
     main() 
