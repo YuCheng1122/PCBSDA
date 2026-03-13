@@ -9,7 +9,6 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from collections import Counter
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score, f1_score, classification_report, confusion_matrix,
@@ -17,56 +16,9 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
-from torch_geometric.utils import from_networkx
 from torch_geometric.data import Batch
 
-
-# ============================================================
-# Graph loading (reuse from original GNN)
-# ============================================================
-
-def load_graphs_from_df(df, graph_dir, classification=False):
-    """載入 DataFrame 中所有樣本的圖資料"""
-    graphs = []
-    labels = []
-    skipped = []
-
-    for _, row in df.iterrows():
-        file_name = row['file_name']
-        prefix = file_name[:2]
-        cpu = row.get('CPU', 'unknown')
-        label = row['family'] if classification else row['label']
-        graph_path = Path(graph_dir) / prefix / f"{file_name}.gpickle"
-
-        if not graph_path.exists():
-            skipped.append((file_name, cpu, "file_not_found"))
-            continue
-
-        with open(graph_path, 'rb') as f:
-            fcg = pickle.load(f)
-
-        if fcg.number_of_nodes() == 0:
-            skipped.append((file_name, cpu, "empty_nodes"))
-            continue
-
-        if fcg.number_of_edges() == 0:
-            skipped.append((file_name, cpu, "no_edges"))
-            continue
-
-        torch_data = from_networkx(fcg)
-        if hasattr(torch_data, 'function_name'):
-            del torch_data.function_name
-        if hasattr(torch_data, 'tokens'):
-            del torch_data.tokens
-        graphs.append(torch_data)
-        labels.append(label)
-
-    if skipped:
-        print(f"Skipped {len(skipped)}/{len(df)} files")
-        for arch, cnt in sorted(Counter(c for _, c, _ in skipped).items()):
-            print(f"  {arch}: -{cnt}")
-
-    return graphs, labels
+from ours.src.gnn.utils import load_graphs_from_df
 
 
 def load_domain_data(csv_path, graph_dir, cpus, cache_file, force_reload, classification):

@@ -108,7 +108,6 @@ def load_cross_arch_data(csv_path, graph_dir, source_cpus, target_cpus, cache_fi
         stratify=train_all_labels, random_state=random_state
     )
 
-    # Label encoding: 需要 fit 所有可能出現的 label (包含 target 架構)
     label_encoder = LabelEncoder()
     target_df = df[df['CPU'].isin(target_cpus)]
     all_labels_for_fit = train_labels + val_labels
@@ -138,12 +137,12 @@ def load_cross_arch_data(csv_path, graph_dir, source_cpus, target_cpus, cache_fi
     return train_graphs, val_graphs, label_encoder, num_classes
 
 
-def load_graphs_from_df(df, graph_dir, classification=False):
-    LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "outputs", "logs")
-    os.makedirs(LOG_DIR, exist_ok=True)
-    # 用 graph_dir 最後一層目錄名區分不同 embedding method 的 log
+def load_graphs_from_df(df, graph_dir, classification=False, log_dir=None):
+    if log_dir is None:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "outputs", "logs")
+    os.makedirs(log_dir, exist_ok=True)
     method_tag = os.path.basename(graph_dir.rstrip('/'))
-    log_path = os.path.join(LOG_DIR, f"skipped_files_{method_tag}.log")
+    log_path = os.path.join(log_dir, f"skipped_files_{method_tag}.log")
 
     graphs = []
     labels = []
@@ -171,11 +170,11 @@ def load_graphs_from_df(df, graph_dir, classification=False):
             skipped.append((file_name, cpu, "no_edges"))
             continue
 
+        node_features = np.array([fcg.nodes[n]['x'] for n in fcg.nodes()])
+        for n in fcg.nodes():
+            fcg.nodes[n].pop('x', None)
         torch_data = from_networkx(fcg)
-        if hasattr(torch_data, 'function_name'):
-            del torch_data.function_name
-        if hasattr(torch_data, 'tokens'):
-            del torch_data.tokens
+        torch_data.x = torch.tensor(node_features, dtype=torch.float)
         graphs.append(torch_data)
         labels.append(label)
 

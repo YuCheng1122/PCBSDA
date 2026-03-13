@@ -10,7 +10,7 @@ import argparse
 BASE_PATH = "/home/tommy/Project/PCBSDA"
 
 # Input: raw gpickle graphs (no embedding yet)
-RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn"
+RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"
 
 # Output: embedded gpickle graphs (per model)
 OUTPUT_BASE = f"{BASE_PATH}/ours/outputs/embedded_graphs"
@@ -65,10 +65,10 @@ def process_single_graph(graph_path, model):
 
     for node_id, node_data in graph.nodes(data=True):
         tokens = node_data.get('tokens', [])
-        if tokens:
-            sentence = " ".join(tokens)
-            embedding = get_sentence_embedding(sentence, model)
-            node_data['x'] = embedding
+        sentence = " ".join(tokens) if tokens else ""
+        node_data['x'] = get_sentence_embedding(sentence, model)
+        node_data.pop('function_name', None)
+        node_data.pop('tokens', None)
 
     return graph
 

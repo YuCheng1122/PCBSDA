@@ -213,25 +213,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# =============================================================================
-# 舊版 detection (binary) main — 保留做對照
-# =============================================================================
-# def main_detection():
-#     """原始 binary detection 版本，使用 num_target_samples (total) sampling"""
-#     config = get_ccsa_config()
-#     # 需要設定:
-#     #   "classification": False
-#     #   "csv_path": "...merged_adjusted_filtered.csv"
-#     #   "num_target_samples": 10  (total, not per-class)
-#     #   cache files: ccsa_source.pkl / ccsa_target.pkl
-#     random_states = config["random_states"]
-#
-#     mode = "Detection (label)"
-#     print(f"=== CCSA Transfer Learning ===")
-#     print(f"Mode: {mode}")
-#     print(f"Source: {config['source_cpus']} -> Target: {config['target_cpus']}")
-#     print(f"Target few-shot samples: {config['num_target_samples']}")
-#     ...  # (same as above, with config["num_target_samples"] in summary)
-#     ...

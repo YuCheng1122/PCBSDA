@@ -1,30 +1,23 @@
 def get_ccsa_config():
-    BASE_PATH = "/home/tommy/Project/PcodeBERT"
-    TEST_CCSA_PATH = f"{BASE_PATH}/experiment/temp/test_ccsa"
+    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    EMBEDDING = "cbow"  # "cbow", "skipgram", "fast_text", "roberta"
 
     config = {
         # Task mode
-        # "classification": False,  # False = label detection (binary), True = family classification
-        "classification": True,   # 5-class family classification
+        "classification": True,
 
         # Domain: source = fully labeled, target = few-shot labeled
         "source_cpus": ["x86_64"],
-        "target_cpus": ["MIPS"],
+        "target_cpus": ["ARM-32"],
 
         # Data paths
-        # "csv_path": f"{BASE_PATH}/dataset/csv/merged_adjusted_filtered.csv",
-        # "csv_path": f"{TEST_CCSA_PATH}/dataset/csv/family_balanced.csv",
-        "csv_path": f"{TEST_CCSA_PATH}/dataset/csv/malware_only_multi_arch.csv",
-        "graph_dir": f"{BASE_PATH}/experiment/temp/gnn/outputs/data/GNN/gpickle_cbow",
+        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_clean.csv",
+        "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
 
         # Cache
-        # "source_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_source.pkl",
-        # "target_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_target.pkl",
-        # "source_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_family_source.pkl",
-        # "target_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_family_target.pkl",
-        "source_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_malware_source.pkl",
-        "target_cache_file": f"{TEST_CCSA_PATH}/outputs/cache/ccsa_malware_target.pkl",
-        "force_reload": True,   # 新 CSV 要 reload
+        "source_cache_file": f"{BASE_PATH}/ours/outputs/cache/ccsa/{EMBEDDING}/ccsa_source.pkl",
+        "target_cache_file": f"{BASE_PATH}/ours/outputs/cache/ccsa/{EMBEDDING}/ccsa_target.pkl",
+        "force_reload": True,
 
         # Data split
         "source_val_size": 0.2,         # source: train/val = 80/20
@@ -61,9 +54,10 @@ def get_ccsa_config():
         "pin_memory": True,
 
         # Output paths
-        "model_output_dir": f"{TEST_CCSA_PATH}/outputs/models",
-        "plot_dir": f"{TEST_CCSA_PATH}/outputs/plots",
-        "result_dir": f"{TEST_CCSA_PATH}/outputs/results",
+        "model_output_dir": f"{BASE_PATH}/ours/outputs/models/ccsa/{EMBEDDING}",
+        "plot_dir": f"{BASE_PATH}/ours/outputs/plots/ccsa/{EMBEDDING}",
+        "result_dir": f"{BASE_PATH}/ours/outputs/results/ccsa/{EMBEDDING}",
+        "log_dir": f"{BASE_PATH}/ours/outputs/logs/ccsa/{EMBEDDING}",
     }
 
     return config

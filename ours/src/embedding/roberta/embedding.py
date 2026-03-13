@@ -1,189 +1,140 @@
 import os
-import sys
 import pickle
 import torch
 import numpy as np
 from transformers import RobertaForMaskedLM, AutoTokenizer
-import glob
 from tqdm import tqdm
 import json
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Paths
-MODEL_PATH = "/home/tommy/Project/PcodeBERT/outputs/models/RoBERTa/model_epoch_25"
-GRAPH_INPUT_DIR = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered"
-GRAPH_OUTPUT_DIR = "/home/tommy/Project/PcodeBERT/outputs/data/GNN/gpickle_merged_adjusted_filtered_temp"
+BASE_PATH = "/home/tommy/Project/PCBSDA"
+MODEL_PATH = f"{BASE_PATH}/ours/outputs/models/embedding/roberta/model_epoch_25"
+RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"
+OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta"
 
 
-def load_pretrained_model():
-    """載入預訓練的模型和tokenizer"""
-    model_path = MODEL_PATH
-    
+def load_pretrained_model(model_path=MODEL_PATH):
+    """Load pretrained RoBERTa model and tokenizer."""
     print(f"Loading model from: {model_path}")
-    
-    # 載入tokenizer和model
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = RobertaForMaskedLM.from_pretrained(model_path)
-    
-    # 設定device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
-    print(f"Model Config: {model.config}")
-    print(f"Model loaded successfully on device: {device}")
+    print(f"Model loaded on device: {device}, hidden_size: {model.config.hidden_size}")
     return model, tokenizer, device
 
+
 def get_embeddings_batch(sentences, model, tokenizer, device, batch_size=1000):
+    """Get mean-pooled embeddings for a list of sentences."""
     all_embeddings = []
-    
+
     for i in range(0, len(sentences), batch_size):
-        batch_sentences = sentences[i : i + batch_size]
-        
+        batch_sentences = sentences[i:i + batch_size]
+
         inputs = tokenizer(
-            batch_sentences, 
-            return_tensors="pt", 
-            truncation=True, 
-            padding=True, 
+            batch_sentences,
+            return_tensors="pt",
+            truncation=True,
+            padding=True,
             max_length=512
         )
-        
         inputs = {k: v.to(device) for k, v in inputs.items()}
-        
+
         with torch.no_grad():
             outputs = model.roberta(**inputs)
             attention_mask = inputs['attention_mask'].unsqueeze(-1)
             embeddings = (outputs.last_hidden_state * attention_mask).sum(1) / attention_mask.sum(1)
-            print(f"\nEmbedding stats:")
-            print(f"  Mean: {embeddings.mean().item():.6f}")
-            print(f"  Std: {embeddings.std().item():.6f}")
-            print(f"  Min: {embeddings.min().item():.6f}")
-            print(f"  Max: {embeddings.max().item():.6f}")     
             all_embeddings.append(embeddings.cpu().numpy())
-    
+
     if not all_embeddings:
         return np.array([])
-        
+
     return np.concatenate(all_embeddings, axis=0)
 
-def process_single_graph(graph_path, model, tokenizer, device):
-    """處理單個graph檔案（使用批次處理）"""
-    try:
-        with open(graph_path, 'rb') as f:
-            graph = pickle.load(f)
-        
-        node_ids_with_sentence = []
-        sentences_to_process = []
-        for node_id, node_data in graph.nodes(data=True):
-            sentence = node_data.get('sentence', '')
-            if sentence:
-                node_ids_with_sentence.append(node_id)
-                sentences_to_process.append(sentence)
 
-        if not sentences_to_process:
-            return {
-                'file_path': graph_path,
-                'node_embeddings': {},
-                'node_sentences': {},
-                'num_nodes': 0,
-                'embedding_dim': model.config.hidden_size 
-            }
-        all_embeddings = get_embeddings_batch(sentences_to_process, model, tokenizer, device)
-        
-        node_embeddings = {}
-        node_sentences = {}
-        embedding_dim = 0
-        
+def process_single_graph(graph_path, model, tokenizer, device):
+    """Embed all nodes in a single graph, same output format as W2V."""
+    with open(graph_path, 'rb') as f:
+        graph = pickle.load(f)
+
+    node_ids = []
+    sentences = []
+    for node_id, node_data in graph.nodes(data=True):
+        tokens = node_data.get('tokens', [])
+        sentence = " ".join(tokens) if tokens else ""
+        node_ids.append(node_id)
+        sentences.append(sentence)
+
+    if sentences:
+        all_embeddings = get_embeddings_batch(sentences, model, tokenizer, device)
+    else:
+        all_embeddings = np.array([])
+
+    for i, node_id in enumerate(node_ids):
+        node_data = graph.nodes[node_id]
         if all_embeddings.size > 0:
-            embedding_dim = all_embeddings.shape[1]
-            for i, node_id in enumerate(node_ids_with_sentence):
-                node_embeddings[node_id] = all_embeddings[i]
-                node_sentences[node_id] = sentences_to_process[i]
-        
-        return {
-            'file_path': graph_path,
-            'node_embeddings': node_embeddings,
-            'node_sentences': node_sentences,
-            'num_nodes': len(node_embeddings),
-            'embedding_dim': embedding_dim
-        }
-        
-    except Exception as e:
-        print(f"Error processing {graph_path}: {e}")
-        return None
+            node_data['x'] = all_embeddings[i].astype(np.float32)
+        else:
+            node_data['x'] = np.zeros(model.config.hidden_size, dtype=np.float32)
+        node_data.pop('function_name', None)
+        node_data.pop('tokens', None)
+
+    return graph
+
 
 def find_all_gpickle_files(base_path):
+    """Find all gpickle files recursively."""
     gpickle_files = []
     for root, dirs, files in os.walk(base_path):
         for file in files:
             if file.endswith('.gpickle'):
                 gpickle_files.append(os.path.join(root, file))
-    
     return gpickle_files
 
-def batch_process_graphs(base_path, output_base_dir):
-    """批量處理所有graph檔案，保持相同目錄結構"""
-    # 載入模型
+
+def batch_process_graphs():
+    """Batch process all graph files with RoBERTa embedding."""
     model, tokenizer, device = load_pretrained_model()
-    
-    # 找到所有gpickle檔案
-    gpickle_files = find_all_gpickle_files(base_path)
+
+    gpickle_files = find_all_gpickle_files(RAW_GRAPH_DIR)
     print(f"Found {len(gpickle_files)} gpickle files")
-    
-    # 統計資訊
+
     processed_count = 0
     failed_count = 0
-    total_nodes = 0
-    embedding_dim = 0
-    
-    for i, file_path in enumerate(tqdm(gpickle_files, desc="Processing graphs")):
-        print(f"\nProcessing {i+1}/{len(gpickle_files)}: {os.path.basename(file_path)}")
-        
-        result = process_single_graph(file_path, model, tokenizer, device)
-        
-        if result:
-            # 建立對應的輸出路徑結構
-            # 從原始路徑取得相對路徑
-            rel_path = os.path.relpath(file_path, base_path)
-            output_path = os.path.join(output_base_dir, rel_path)
-            
-            # 創建輸出目錄
+
+    for file_path in tqdm(gpickle_files, desc="Embedding with roberta"):
+        try:
+            graph = process_single_graph(file_path, model, tokenizer, device)
+
+            rel_path = os.path.relpath(file_path, RAW_GRAPH_DIR)
+            output_path = os.path.join(OUTPUT_DIR, rel_path)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            # 儲存單個檔案的embedding結果
+
             with open(output_path, 'wb') as f:
-                pickle.dump(result, f)
-            
+                pickle.dump(graph, f)
+
             processed_count += 1
-            total_nodes += result['num_nodes']
-            if embedding_dim == 0:
-                embedding_dim = result['embedding_dim']
-        else:
+
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
             failed_count += 1
-    
-    # 儲存統計資訊
+
     stats = {
+        'model_name': 'roberta',
         'total_files': len(gpickle_files),
         'processed_files': processed_count,
         'failed_files': failed_count,
-        'total_nodes': total_nodes,
-        'embedding_dim': embedding_dim
+        'embedding_dim': model.config.hidden_size
     }
-    
-    stats_path = os.path.join(output_base_dir, "processing_stats.json")
+
+    stats_path = os.path.join(OUTPUT_DIR, "processing_stats_roberta.json")
     with open(stats_path, 'w') as f:
         json.dump(stats, f, indent=2)
 
-    print(f"Results saved to: {output_base_dir}")
-    print(f"Stats saved to: {stats_path}")
+    print(f"Results saved to: {OUTPUT_DIR}")
+    print(f"Processed: {processed_count}, Failed: {failed_count}")
 
-def main():
-    print(f"Starting batch processing...")
-    print(f"Input directory: {GRAPH_INPUT_DIR}")
-    print(f"Output directory: {GRAPH_OUTPUT_DIR}")
-    
-    # 批量處理
-    batch_process_graphs(GRAPH_INPUT_DIR, GRAPH_OUTPUT_DIR)
 
 if __name__ == "__main__":
-    main() 
+    batch_process_graphs()
