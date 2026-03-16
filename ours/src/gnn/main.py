@@ -118,7 +118,19 @@ def run_experiment(seed, config):
     # --- Model / Optimizer / Scheduler ---
     model = build_model(config, num_classes, device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = torch.nn.CrossEntropyLoss()
+
+    # Weighted CE Loss for family classification (handle class imbalance)
+    if config["classification"]:
+        class_counts = torch.zeros(num_classes)
+        for g in train_graphs:
+            class_counts[int(g.y)] += 1
+        class_weights = len(train_graphs) / (num_classes * class_counts)
+        class_weights = class_weights.to(device)
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+        print(f"Using weighted CE Loss, class weights: {class_weights.cpu().tolist()}")
+    else:
+        criterion = torch.nn.CrossEntropyLoss()
+
     scheduler = build_scheduler(optimizer, config)
 
     # --- Training loop (只追蹤 train/val) ---

@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from configs.ccsa.baseline import get_ccsa_config
-from src.gnn.models import GCN
+from src.transfer_learning.ccsa.models import GCN_CCSA
 from src.transfer_learning.ccsa.utils import (
     prepare_ccsa_data, CCSAPairDataset, ccsa_pair_collate_fn,
     train_ccsa_epoch, evaluate, test_model,
@@ -17,7 +17,7 @@ from src.transfer_learning.ccsa.utils import (
 
 
 def build_model(config, num_classes, device):
-    model = GCN(
+    model = GCN_CCSA(
         num_node_features=config["num_node_features"],
         hidden_channels=config["hidden_channels"],
         output_channels=config["output_channels"],

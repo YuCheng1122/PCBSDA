@@ -18,7 +18,7 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 from torch_geometric.data import Batch
 
-from ours.src.gnn.utils import load_graphs_from_df
+from src.gnn.utils import load_graphs_from_df
 
 
 def load_domain_data(csv_path, graph_dir, cpus, cache_file, force_reload, classification):

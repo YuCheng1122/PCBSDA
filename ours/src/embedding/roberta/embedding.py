@@ -8,9 +8,9 @@ import json
 
 
 BASE_PATH = "/home/tommy/Project/PCBSDA"
-MODEL_PATH = f"{BASE_PATH}/ours/outputs/models/embedding/roberta/model_epoch_25"
+MODEL_PATH = f"{BASE_PATH}/ours/outputs/models/embedding/roberta/model_epoch_10"
 RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"
-OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta"
+OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta_10"
 
 
 def load_pretrained_model(model_path=MODEL_PATH):
@@ -25,7 +25,7 @@ def load_pretrained_model(model_path=MODEL_PATH):
     return model, tokenizer, device
 
 
-def get_embeddings_batch(sentences, model, tokenizer, device, batch_size=1000):
+def get_embeddings_batch(sentences, model, tokenizer, device, batch_size=256):
     """Get mean-pooled embeddings for a list of sentences."""
     all_embeddings = []
 

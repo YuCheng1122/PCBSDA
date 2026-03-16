@@ -10,7 +10,7 @@ def get_gnn_config():
         # "MIPS", "Intel", "PPC"
 
         # Data paths
-        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_clean.csv",
+        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
         "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
         "cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn.pkl",
         "test_cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn_test.pkl",
@@ -24,9 +24,9 @@ def get_gnn_config():
 
         # Model architecture
         "model_type": "GCN",            # "GCN" or "GAT"
-        "num_node_features": 128,       # input node feature dimension
-        "hidden_channels": 128,          # hidden layer dimension
-        "output_channels": 128,         # output dimension before classifier
+        "num_node_features": 256,       # input node feature dimension
+        "hidden_channels": 256,          # hidden layer dimension
+        "output_channels": 256,         # output dimension before classifier
         "num_layers": 2,                # number of GNN conv layers
         "dropout": 0.2,
         "pooling": "add",               # "add" or "attention"
@@ -52,7 +52,7 @@ def get_gnn_config():
         "cosine_T_max": 100,            # for CosineAnnealingLR
 
         # Seeds
-        "seeds": [42, 2021],
+        "seeds": [42],
         "device": "cuda",
 
         # Output paths
