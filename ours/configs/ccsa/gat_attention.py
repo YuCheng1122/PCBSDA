@@ -1,7 +1,7 @@
 def get_ccsa_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
     EMBEDDING = "cbow"
-    MODEL = "gcn"
+    MODEL = "gat"
 
     config = {
         # Task mode
@@ -15,33 +15,34 @@ def get_ccsa_config():
         "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
         "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
 
-        # Cache
+        # Cache (reuse same cache as baseline)
         "source_cache_file": f"{BASE_PATH}/ours/outputs/cache/ccsa/{EMBEDDING}/ccsa_source.pkl",
         "target_cache_file": f"{BASE_PATH}/ours/outputs/cache/ccsa/{EMBEDDING}/ccsa_target.pkl",
         "force_reload": False,
 
         # Data split
-        "source_val_size": 0.2,         # source: train/val = 80/20
-        "random_states": [42, 123],  # 多次實驗用不同 target sampling
+        "source_val_size": 0.2,
+        "random_states": [42, 123, 7, 21, 99],  # 5 seeds
 
-        # Few-shot: target domain 使用的 labeled 樣本數量 (per class)
-        "num_target_samples_per_class": 5, 
+        # Few-shot
+        "num_target_samples_per_class": 5,
 
         # Pair generation
-        "neg_pair_ratio": 3,            # negative pairs = neg_pair_ratio * positive pairs
+        "neg_pair_ratio": 3,
 
-        # Model architecture (GCN baseline)
-        "model_type": "GCN",
+        # Model architecture (GAT + attention pooling)
+        "model_type": "GAT",
         "num_node_features": 256,
         "hidden_channels": 256,
-        "output_channels": 256,         # feature dimension (for CSA loss)
+        "output_channels": 256,
         "num_layers": 2,
         "dropout": 0.2,
-        "pooling": "add",               # "add", "mean", or "attention"
+        "pooling": "attention",         # "add", "mean", or "attention"
+        "gat_heads": 4,
 
-        # CCSA Training (best from sweep: alpha=0.9, margin=0.5)
-        "alpha": 0.9,                  # loss = (1-alpha)*CE + alpha*CSA
-        "csa_margin": 0.5,             # CSA cosine margin
+        # CCSA Training
+        "alpha": 0.9,
+        "csa_margin": 0.5,
         "batch_size": 128,
         "learning_rate": 0.001,
         "epochs": 200,
@@ -62,4 +63,3 @@ def get_ccsa_config():
     }
 
     return config
-

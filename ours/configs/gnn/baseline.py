@@ -1,6 +1,6 @@
 def get_gnn_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
-    EMBEDDING = "cbow"  # "cbow", "skipgram", "fast_text", "roberta"
+    EMBEDDING = "roberta_10"  # "cbow", "skipgram", "fast_text", "roberta"
 
     config = {
         # Task mode

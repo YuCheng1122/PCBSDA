@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 from functools import partial
 
@@ -8,7 +9,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from configs.ccsa.baseline import get_ccsa_config
-from src.transfer_learning.ccsa.models import GCN_CCSA
+from src.transfer_learning.ccsa.models import GCN_CCSA, GAT_CCSA
 from src.transfer_learning.ccsa.utils import (
     prepare_ccsa_data, CCSAPairDataset, ccsa_pair_collate_fn,
     train_ccsa_epoch, evaluate, test_model,
@@ -16,8 +17,27 @@ from src.transfer_learning.ccsa.utils import (
 )
 
 
+def setup_logger(log_dir, name="ccsa"):
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, f"{name}.log")
+
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(message)s"))
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(message)s"))
+
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    return logger
+
+
 def build_model(config, num_classes, device):
-    model = GCN_CCSA(
+    model_type = config.get("model_type", "GCN")
+    common_kwargs = dict(
         num_node_features=config["num_node_features"],
         hidden_channels=config["hidden_channels"],
         output_channels=config["output_channels"],
@@ -26,10 +46,14 @@ def build_model(config, num_classes, device):
         dropout=config["dropout"],
         pooling=config["pooling"],
     )
+    if model_type == "GAT":
+        model = GAT_CCSA(**common_kwargs, heads=config.get("gat_heads", 4))
+    else:
+        model = GCN_CCSA(**common_kwargs)
     return model.to(device)
 
 
-def run_experiment(config, random_state, device):
+def run_experiment(config, random_state, dirs, logger):
     """執行一次 CCSA 實驗，使用指定的 random_state 抽 target samples"""
 
     # --- Load data ---
@@ -64,9 +88,10 @@ def run_experiment(config, random_state, device):
     )
 
     # --- Model / Optimizer ---
-    model = build_model(config, num_classes, device)
+    model = build_model(config, num_classes, config["device"])
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
     ce_criterion = torch.nn.CrossEntropyLoss()
+    device = next(model.parameters()).device
 
     # --- Training loop ---
     train_losses = []
@@ -82,6 +107,11 @@ def run_experiment(config, random_state, device):
     epochs = config["epochs"]
     patience = config["patience"]
 
+    logger.info(f"\n--- Training (seed={random_state}) ---")
+    logger.info(f"{'Epoch':>6}  {'Loss':>8}  {'CE':>8}  {'CSA':>8}  "
+                f"{'SrcValAcc':>10}  {'TgtFewAcc':>10}  {'TgtTestAcc':>11}")
+    logger.info("-" * 70)
+
     for epoch in range(1, epochs + 1):
         train_loss, train_ce, train_csa = train_ccsa_epoch(
             model, pair_loader, optimizer, ce_criterion, device, alpha, margin
@@ -94,6 +124,9 @@ def run_experiment(config, random_state, device):
         val_losses_list.append(val_loss)
         val_accuracies.append(val_accuracy)
 
+        logger.info(f"{epoch:>6}  {train_loss:>8.4f}  {train_ce:>8.4f}  {train_csa:>8.4f}  "
+                    f"{val_accuracy:>10.4f}  {tgt_train_accuracy:>10.4f}  {tgt_accuracy:>11.4f}")
+
         # Early stopping 只看 source val loss（避免 target test leakage）
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -103,29 +136,28 @@ def run_experiment(config, random_state, device):
             patience_counter += 1
 
         if patience_counter >= patience:
-            print(f"Early stopping at epoch {epoch}")
+            logger.info(f"Early stopping at epoch {epoch}")
             break
-
-        print(f"[Epoch {epoch}] "
-              f"Loss={train_loss:.4f} (CE={train_ce:.4f}, CSA={train_csa:.4f}) | "
-              f"Src Val Acc={val_accuracy:.4f} | Tgt Few-shot Acc={tgt_train_accuracy:.4f} | Tgt Test Acc={tgt_accuracy:.4f}")
 
     # --- Load best model ---
     model.load_state_dict(best_model_state)
 
     # --- Save best model ---
-    os.makedirs(config["model_output_dir"], exist_ok=True)
-    save_path = os.path.join(config["model_output_dir"], f"ccsa_best_rs{random_state}.pt")
+    os.makedirs(dirs["model_output_dir"], exist_ok=True)
+    save_path = os.path.join(dirs["model_output_dir"], f"ccsa_best_rs{random_state}.pt")
     torch.save(best_model_state, save_path)
-    print(f"Model saved to: {save_path}")
+    logger.info(f"Model saved to: {save_path}")
 
     # --- Plot ---
     plot_training_curves(train_losses, val_losses_list, val_accuracies,
-                         save_dir=config["plot_dir"], random_state=random_state)
+                         save_dir=dirs["plot_dir"], random_state=random_state)
 
     # --- Final evaluation ---
-    print(f"\n--- Final Evaluation (random_state={random_state}) ---")
+    logger.info(f"\n--- Final Evaluation (seed={random_state}) ---")
     target_results = test_model(model, target_test_loader, device, label_encoder)
+
+    # Log classification report
+    logger.info(f"Report:\n{target_results['classification_report']}")
 
     return target_results, best_model_state, label_encoder, num_classes
 
@@ -134,32 +166,45 @@ def main():
     config = get_ccsa_config()
     random_states = config["random_states"]
 
+    model_type = config.get("model_type", "GCN")
+    dirs = {
+        "model_output_dir": config["model_output_dir"],
+        "plot_dir":         config["plot_dir"],
+        "result_dir":       config["result_dir"],
+        "log_dir":          config["log_dir"],
+    }
+
+    # patch device into model (run_experiment reads it from config)
+    device = torch.device(config["device"] if torch.cuda.is_available() else 'cpu')
+    config["device"] = device
+
+    logger = setup_logger(dirs["log_dir"], name="ccsa")
+
     mode = "Classification (family)" if config["classification"] else "Detection (label)"
     if "num_target_samples_per_class" in config:
         fewshot_desc = f"{config['num_target_samples_per_class']} per class"
     else:
         fewshot_desc = f"{config.get('num_target_samples', '?')} total"
-    print(f"=== CCSA Transfer Learning ===")
-    print(f"Mode: {mode}")
-    print(f"Source: {config['source_cpus']} -> Target: {config['target_cpus']}")
-    print(f"Target few-shot samples: {fewshot_desc}")
-    print(f"Model: GCN | Pooling: {config['pooling']} | Layers: {config['num_layers']}")
-    print(f"Dropout: {config['dropout']} | LR: {config['learning_rate']}")
-    print(f"Alpha: {config['alpha']} | Margin: {config['csa_margin']}")
-    print(f"Runs: {len(random_states)} (random_states: {random_states})")
-    print()
 
-    device = torch.device(config["device"] if torch.cuda.is_available() else 'cpu')
-    os.makedirs(config["model_output_dir"], exist_ok=True)
+    logger.info(f"=== CCSA Transfer Learning ===")
+    logger.info(f"Mode: {mode}")
+    logger.info(f"Source: {config['source_cpus']} -> Target: {config['target_cpus']}")
+    logger.info(f"Target few-shot samples: {fewshot_desc}")
+    logger.info(f"Model: {model_type} | Pooling: {config['pooling']} | Layers: {config['num_layers']}")
+    logger.info(f"Dropout: {config['dropout']} | LR: {config['learning_rate']}")
+    logger.info(f"Alpha: {config['alpha']} | Margin: {config['csa_margin']}")
+    logger.info(f"Runs: {len(random_states)} (seeds: {random_states})")
+    logger.info("")
+
+    os.makedirs(dirs["model_output_dir"], exist_ok=True)
 
     all_results = []
 
     for i, rs in enumerate(random_states):
-        print(f"\n{'='*60}")
-        print(f"Run {i + 1}/{len(random_states)}, random_state={rs}")
-        print(f"{'='*60}")
-        results, _, _, _ = \
-            run_experiment(config, rs, device)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Run {i + 1}/{len(random_states)}, seed={rs}")
+        logger.info(f"{'='*60}")
+        results, _, _, _ = run_experiment(config, rs, dirs, logger)
         all_results.append({'random_state': rs, **results})
 
     # --- Summary ---
@@ -169,21 +214,21 @@ def main():
     precisions = [r['precision'] for r in all_results]
     recalls = [r['recall'] for r in all_results]
 
-    print(f"\n{'='*60}")
-    print(f"Summary ({len(random_states)} runs)")
-    print(f"Source: {config['source_cpus']} -> Target: {config['target_cpus']}")
-    print(f"Target few-shot samples: {fewshot_desc}")
-    print(f"{'='*60}")
-    print(f"  Accuracy  : {np.mean(accs):.4f} +/- {np.std(accs):.4f}  (min={np.min(accs):.4f}, max={np.max(accs):.4f})")
-    print(f"  Precision : {np.mean(precisions):.4f} +/- {np.std(precisions):.4f}")
-    print(f"  Recall    : {np.mean(recalls):.4f} +/- {np.std(recalls):.4f}")
-    print(f"  F1-macro  : {np.mean(f1_macros):.4f} +/- {np.std(f1_macros):.4f}")
-    print(f"  AUC       : {np.mean(aucs):.4f} +/- {np.std(aucs):.4f}")
-
+    logger.info(f"\n{'='*60}")
+    logger.info(f"Summary ({len(random_states)} runs)")
+    logger.info(f"Source: {config['source_cpus']} -> Target: {config['target_cpus']}")
+    logger.info(f"Target few-shot samples: {fewshot_desc}")
+    logger.info(f"{'='*60}")
+    logger.info(f"  Accuracy  : {np.mean(accs):.4f} +/- {np.std(accs):.4f}  (min={np.min(accs):.4f}, max={np.max(accs):.4f})")
+    logger.info(f"  Precision : {np.mean(precisions):.4f} +/- {np.std(precisions):.4f}")
+    logger.info(f"  Recall    : {np.mean(recalls):.4f} +/- {np.std(recalls):.4f}")
+    logger.info(f"  F1-macro  : {np.mean(f1_macros):.4f} +/- {np.std(f1_macros):.4f}")
+    logger.info(f"  AUC       : {np.mean(aucs):.4f} +/- {np.std(aucs):.4f}")
+    logger.info("")
     for r in all_results:
-        print(f"  rs={r['random_state']}: acc={r['accuracy']:.4f}, f1={r['f1_macro']:.4f}, auc={r['auc']:.4f}")
+        logger.info(f"  seed={r['random_state']}: acc={r['accuracy']:.4f}, f1={r['f1_macro']:.4f}, auc={r['auc']:.4f}")
 
-    # --- Save results ---
+    # --- Save results JSON ---
     results_summary = {
         'mode': mode,
         'source_cpus': config['source_cpus'],
@@ -191,7 +236,8 @@ def main():
         'target_fewshot': fewshot_desc,
         'alpha': config['alpha'],
         'csa_margin': config['csa_margin'],
-        'model_type': 'GCN',
+        'model_type': model_type,
+        'pooling': config['pooling'],
         'mean_accuracy': float(np.mean(accs)),
         'std_accuracy': float(np.std(accs)),
         'mean_f1_macro': float(np.mean(f1_macros)),
@@ -207,8 +253,8 @@ def main():
         ],
     }
 
-    timestamp = save_experiment_results(results_summary, save_dir=config["result_dir"])
-    print(f"\nResults saved with timestamp: {timestamp}")
+    timestamp = save_experiment_results(results_summary, save_dir=dirs["result_dir"])
+    logger.info(f"\nResults saved with timestamp: {timestamp}")
 
 
 if __name__ == "__main__":
