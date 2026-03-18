@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
-from configs.ccsa.baseline import get_ccsa_config
+from configs.ccsa.gat_attention import get_ccsa_config
 from src.transfer_learning.ccsa.models import GCN_CCSA, GAT_CCSA
 from src.transfer_learning.ccsa.utils import (
     prepare_ccsa_data, CCSAPairDataset, ccsa_pair_collate_fn,

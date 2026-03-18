@@ -43,7 +43,7 @@ def get_ccsa_config():
         # CCSA Training
         "alpha": 0.9,
         "csa_margin": 0.5,
-        "batch_size": 128,
+        "batch_size": 32,
         "learning_rate": 0.001,
         "epochs": 200,
         "patience": 10,
