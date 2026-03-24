@@ -41,7 +41,7 @@ def get_ccsa_config():
         "gat_heads": 4,
 
         # CCSA Training
-        "alpha": 0.9,
+        "alpha": 0.3,
         "csa_margin": 0.5,
         "batch_size": 32,
         "learning_rate": 0.001,
