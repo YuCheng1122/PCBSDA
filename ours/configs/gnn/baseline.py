@@ -1,6 +1,6 @@
 def get_gnn_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
-    EMBEDDING = "roberta_10"  # "cbow", "skipgram", "fast_text", "roberta"
+    EMBEDDING = "cbow"  # "cbow", "skipgram", "fast_text", "roberta"
 
     config = {
         # Task mode
@@ -52,7 +52,7 @@ def get_gnn_config():
         "cosine_T_max": 100,            # for CosineAnnealingLR
 
         # Seeds
-        "seeds": [42],
+        "seeds": [42,123, 57],
         "device": "cuda",
 
         # Output paths
