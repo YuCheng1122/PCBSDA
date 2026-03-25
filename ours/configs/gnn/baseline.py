@@ -1,12 +1,13 @@
 def get_gnn_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
     EMBEDDING = "roberta_20"  # "cbow", "skipgram", "fast_text", "roberta"
+    MODEL = "gat"             # "gcn" or "gat"
 
     config = {
         # Task mode
         "classification": True,  # False = label detection, True = family classification
-        "source_cpus": ["x86_64"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
-        "target_cpus": ["MIPS", "Intel", "ARM-32"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
+        "source_cpus": ["Intel"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
+        "target_cpus": ["MIPS", "x86_64", "ARM-32"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
         # "MIPS", "Intel", "PPC"
 
         # Data paths
@@ -56,10 +57,10 @@ def get_gnn_config():
         "device": "cuda",
 
         # Output paths
-        "model_output_dir": f"{BASE_PATH}/ours/outputs/models/gnn/{EMBEDDING}",
-        "plot_dir": f"{BASE_PATH}/ours/outputs/plots/gnn/{EMBEDDING}",
-        "result_dir": f"{BASE_PATH}/ours/outputs/results/gnn/{EMBEDDING}",
-        "log_dir": f"{BASE_PATH}/ours/outputs/logs/gnn/{EMBEDDING}",
+        "model_output_dir": f"{BASE_PATH}/ours/outputs/models/gnn/{EMBEDDING}/{MODEL}",
+        "plot_dir":         f"{BASE_PATH}/ours/outputs/plots/gnn/{EMBEDDING}/{MODEL}",
+        "result_dir":       f"{BASE_PATH}/ours/outputs/results/gnn/{EMBEDDING}/{MODEL}",
+        "log_dir":          f"{BASE_PATH}/ours/outputs/logs/gnn/{EMBEDDING}/{MODEL}",
     }
 
     return config
