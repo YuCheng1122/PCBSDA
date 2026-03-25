@@ -16,5 +16,4 @@ results/
 outputs/
 *tar.gz
 *.png
-*.csv
 *.json
