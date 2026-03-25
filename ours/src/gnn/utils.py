@@ -293,8 +293,8 @@ def test_model(model, test_loader, device, label_encoder):
             y_prob.extend(prob.cpu().numpy())
 
     accuracy = accuracy_score(y_true, y_pred)
-    f1_micro = f1_score(y_true, y_pred, average='micro')
-    f1_macro = f1_score(y_true, y_pred, average='macro')
+    f1_micro = f1_score(y_true, y_pred, average='micro', zero_division=0)
+    f1_macro = f1_score(y_true, y_pred, average='macro', zero_division=0)
     precision = precision_score(y_true, y_pred, average='macro', zero_division=0)
     recall = recall_score(y_true, y_pred, average='macro', zero_division=0)
 
