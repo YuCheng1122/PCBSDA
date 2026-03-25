@@ -99,7 +99,7 @@ def run_experiment(seed, config):
             cache_file=config["cache_file"],
             val_size=config["single_arch_val_size"],
             test_size=config["single_arch_test_size"],
-            random_state=config["random_state"],
+            random_state=seed,
             force_reload=config["force_reload"],
             classification=config["classification"]
         )

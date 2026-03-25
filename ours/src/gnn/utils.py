@@ -25,6 +25,9 @@ def load_single_arch_data(csv_path, graph_dir, source_cpus, cache_file,
     Returns:
         (train_graphs, val_graphs, test_graphs, label_encoder, num_classes)
     """
+    # cache 路徑帶 random_state，確保不同 seed 的 split 不互相覆蓋
+    cache_file = cache_file.replace(".pkl", f"_seed{random_state}.pkl")
+
     if force_reload and os.path.exists(cache_file):
         os.remove(cache_file)
 

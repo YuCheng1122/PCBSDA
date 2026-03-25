@@ -1,16 +1,16 @@
 def get_gnn_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
-    EMBEDDING = "cbow"  # "cbow", "skipgram", "fast_text", "roberta"
+    EMBEDDING = "roberta_20"  # "cbow", "skipgram", "fast_text", "roberta"
 
     config = {
         # Task mode
         "classification": True,  # False = label detection, True = family classification
         "source_cpus": ["x86_64"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
-        "target_cpus": ["ARM-32"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
+        "target_cpus": ["MIPS", "Intel", "ARM-32"],  # 4-class classification: ARM, MIPS, Intel, PPC; binary classification: ARM vs non-ARM (MIPS/Intel/PPC)
         # "MIPS", "Intel", "PPC"
 
         # Data paths
-        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
+        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8_x86.csv",
         "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
         "cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn.pkl",
         "test_cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn_test.pkl",
@@ -20,16 +20,16 @@ def get_gnn_config():
         "single_arch_test_size": 0.1,
         "cross_arch_val_size": 0.2,
         "random_state": 42,
-        "force_reload": False,
+        "force_reload": True,
 
         # Model architecture
-        "model_type": "GCN",            # "GCN" or "GAT"
+        "model_type": "GAT",            # "GCN" or "GAT"
         "num_node_features": 256,       # input node feature dimension
         "hidden_channels": 256,          # hidden layer dimension
         "output_channels": 256,         # output dimension before classifier
         "num_layers": 2,                # number of GNN conv layers
         "dropout": 0.2,
-        "pooling": "add",               # "add" or "attention"
+        "pooling": "attention",               # "add" or "attention"
 
         # GAT specific
         "gat_heads": 4,
@@ -52,7 +52,7 @@ def get_gnn_config():
         "cosine_T_max": 100,            # for CosineAnnealingLR
 
         # Seeds
-        "seeds": [42,123, 57],
+        "seeds": [42],
         "device": "cuda",
 
         # Output paths

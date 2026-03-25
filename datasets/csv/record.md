@@ -1,3 +1,4 @@
 cross_architecture_dataset is base dataset
 cross_architecture_dataset_clean is after reverse
-cross_architecture_dataset_clean_family8 is for cross architecture classification experiment
+cross_architecture_dataset_clean_family8_x86 is for cross architecture classification experiment
+single_arch_dataset is for single architecture classification
