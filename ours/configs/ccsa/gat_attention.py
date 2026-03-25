@@ -1,6 +1,6 @@
 def get_ccsa_config():
     BASE_PATH = "/home/tommy/Project/PCBSDA"
-    EMBEDDING = "cbow"
+    EMBEDDING = "roberta_20"
     MODEL = "gat"
 
     config = {
