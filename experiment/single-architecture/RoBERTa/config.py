@@ -22,26 +22,30 @@ def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
         "random_state": 42,
 
         # Optuna
-        "n_trials": 50,
+        "n_trials": 20,
         "optuna_timeout": None,
+        "test_size": 0.2,
+        "optuna_n_splits": 3,
 
-        # Default model (RoBERTa → GAT is the default choice)
+        # Model fixed settings (from gnn_single.py)
         "model_type": "GAT",
+        "pooling": "attention",
+        "gat_heads": 4,
+        "scheduler_type": "step",
         "num_node_features": 256,   # roberta_20 output dim
         "num_classes": None,
+        "hidden_channels": 256,
+        "output_channels": 256,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "batch_size": 32,
+        "learning_rate": 0.001,
 
-        # Optuna search space
+        # Optuna search space (only the impactful parameters)
         "search_space": {
-            "hidden_channels": [64, 128, 256],
-            "output_channels": [64, 128, 256],
+            "learning_rate": [1e-4, 1e-2],  # log-uniform
             "num_layers": [1, 2, 3],
-            "dropout": [0.0, 0.5],
-            "batch_size": [16, 32, 64],
-            "learning_rate": [1e-4, 1e-2],
-            "pooling": ["add", "attention"],
-            "model_type": ["GCN", "GAT"],
-            "gat_heads": [2, 4, 8],
-            "scheduler_type": ["step", "plateau", "cosine"],
+            "dropout": [0.1, 0.5],          # uniform float
         },
 
         # Training (fixed)
@@ -60,10 +64,10 @@ def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
         "device": "cuda",
 
         # Output paths
-        "optuna_dir": f"{BASE_PATH}/ours/outputs/optuna/{roberta_tag}/{arch_tag}",
-        "result_dir": f"{BASE_PATH}/ours/outputs/results/single_arch_cv/{roberta_tag}/{arch_tag}",
-        "log_dir": f"{BASE_PATH}/ours/outputs/logs/single_arch_cv/{roberta_tag}/{arch_tag}",
-        "plot_dir": f"{BASE_PATH}/ours/outputs/plots/single_arch_cv/{roberta_tag}/{arch_tag}",
+        "optuna_dir": f"{BASE_PATH}/experiment/outputs/optuna/roberta/{roberta_tag}/{arch_tag}",
+        "result_dir": f"{BASE_PATH}/experiment/outputs/results/roberta/{roberta_tag}/{arch_tag}",
+        "log_dir":    f"{BASE_PATH}/experiment/outputs/logs/roberta/{roberta_tag}/{arch_tag}",
+        "plot_dir":   f"{BASE_PATH}/experiment/outputs/plots/roberta/{roberta_tag}/{arch_tag}",
     }
 
     return config

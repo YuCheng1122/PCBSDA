@@ -1,15 +1,15 @@
 """
 Build single-architecture classification datasets.
-For each of the 4 target architectures, keep only families with >500 samples,
-then sample exactly 500 per (arch, family) pair.
+For each of the 4 target architectures, keep only families with >150 samples,
+then sample exactly 150 per (arch, family) pair.
 """
 
 import pandas as pd
 from pathlib import Path
 
 SEED = 42
-THRESHOLD = 250
-SAMPLE_N = 250
+THRESHOLD = 150
+SAMPLE_N = 150
 TARGET_ARCHS = ['Intel', 'ARM-32', 'x86_64', 'MIPS']
 
 src = Path(__file__).parent.parent / 'csv' / 'cross_architecture_dataset_clean.csv'
