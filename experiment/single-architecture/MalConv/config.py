@@ -26,6 +26,8 @@ def get_malconv_single_config(arch="x86_64"):
         # Cross-Validation
         "n_splits": 5,
         "random_state": 42,
+        "test_size": 0.2,
+        "optuna_n_splits": 3,
 
         # Architecture fixed per paper (filter_size=500, stride=500, 128 filters, embed_dim=8)
         # Paper used batch=256 on 8xGPU DGX-1; single RTX 3080 → batch 16-32
@@ -40,23 +42,18 @@ def get_malconv_single_config(arch="x86_64"):
         "optuna_timeout": None,
 
         "search_space": {
-            "dropout": [0.0, 0.5],
-            "batch_size": [16, 32],
-            "learning_rate": [1e-3, 1e-1],   # paper used SGD lr=0.01; we use Adam
-            "scheduler_type": ["step", "plateau", "cosine"],
+            "learning_rate": [1e-4, 1e-1],   # log-uniform; paper SGD lr=0.01, we use Adam
+            "dropout":       [0.0, 0.5],
+            "batch_size":    [16, 32],        # OOM → auto-pruned
+            "weight_decay":  [1e-5, 1e-3],   # log-uniform; L2 regularization
         },
 
         # Training (fixed)
+        "scheduler_type": "cosine",          # fixed; stable convergence, no extra knobs
         "num_workers": 4,
         "pin_memory": True,
         "epochs": 100,
         "patience": 10,
-
-        # Scheduler fixed params
-        "step_size": 20,
-        "gamma": 0.5,
-        "plateau_patience": 5,
-        "plateau_factor": 0.5,
         "cosine_T_max": 50,
 
         "device": "cuda",

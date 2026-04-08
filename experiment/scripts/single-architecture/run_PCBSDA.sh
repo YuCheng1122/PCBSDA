@@ -5,7 +5,7 @@
 
 GMAIL_APP_PASSWORD=$(cat ~/.gmail_app_password)
 GMAIL_USER="yuchlin00@gmail.com"
-PROJECT_ROOT="/home/tommy/Project/PCBSDA"
+PROJECT_ROOT="/home/tommy/Projects/PCBSDA"
 LOG_DIR="$PROJECT_ROOT/experiment/outputs/logs"
 
 mkdir -p "$LOG_DIR"
@@ -53,8 +53,8 @@ Word2Vec : {w2v}
 開始：{os.environ['START_TIME']}
 結束：{os.environ['END_TIME']}
 
-結果路徑：/home/tommy/Project/PCBSDA/experiment/outputs/results/
-Log 路徑：/home/tommy/Project/PCBSDA/experiment/outputs/logs/
+結果路徑：/home/tommy/Projects/PCBSDA/experiment/outputs/results/
+Log 路徑：/home/tommy/Projects/PCBSDA/experiment/outputs/logs/
 """
 
 msg = MIMEText(body, "plain", "utf-8")

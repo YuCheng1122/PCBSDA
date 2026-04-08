@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import optuna
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
@@ -91,24 +91,10 @@ def build_model(params, num_classes, config, device):
     return model.to(device)
 
 
-def build_scheduler(optimizer, params):
-    stype = params["scheduler_type"]
-    if stype == "step":
-        return torch.optim.lr_scheduler.StepLR(
-            optimizer,
-            step_size=params.get("step_size", 20),
-            gamma=params.get("gamma", 0.5),
-        )
-    elif stype == "plateau":
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            patience=params.get("plateau_patience", 5),
-            factor=params.get("plateau_factor", 0.5),
-        )
-    else:  # cosine
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=params.get("cosine_T_max", 50)
-        )
+def build_scheduler(optimizer, config):
+    return torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.get("cosine_T_max", 50)
+    )
 
 
 def make_class_weights(labels, num_classes, device):
@@ -223,10 +209,12 @@ def train_fold(train_names, train_labels, val_names, val_labels,
                             num_workers=config["num_workers"], pin_memory=config["pin_memory"])
 
     model = build_model(params, num_classes, config, device)
-    # Paper uses SGD + Nesterov momentum=0.9
-    optimizer = torch.optim.SGD(model.parameters(), lr=params["learning_rate"],
-                                momentum=0.9, nesterov=True)
-    scheduler = build_scheduler(optimizer, {**config, **params})
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=params["learning_rate"],
+        weight_decay=params.get("weight_decay", 0.0),
+    )
+    scheduler = build_scheduler(optimizer, config)
     class_weights = make_class_weights(train_labels, num_classes, device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
@@ -239,10 +227,7 @@ def train_fold(train_names, train_labels, val_names, val_labels,
         train_epoch(model, train_loader, optimizer, criterion, device)
         val_acc, val_loss = evaluate(model, val_loader, device)
 
-        if params["scheduler_type"] == "plateau":
-            scheduler.step(val_loss)
-        else:
-            scheduler.step()
+        scheduler.step()
 
         improved = val_loss < best_val_loss
         if improved:
@@ -270,18 +255,18 @@ def train_fold(train_names, train_labels, val_names, val_labels,
 # ---------------------------------------------------------------------------
 
 def make_objective(file_names, labels, num_classes, config):
-    skf = StratifiedKFold(n_splits=config["n_splits"], shuffle=True,
+    skf = StratifiedKFold(n_splits=config["optuna_n_splits"], shuffle=True,
                           random_state=config["random_state"])
     ss = config["search_space"]
 
     def objective(trial):
-        # Architecture fixed per paper; only tune training hyperparameters
         params = {
-            "dropout": trial.suggest_float("dropout", ss["dropout"][0], ss["dropout"][1]),
-            "batch_size": trial.suggest_categorical("batch_size", ss["batch_size"]),
             "learning_rate": trial.suggest_float("learning_rate", ss["learning_rate"][0],
                                                   ss["learning_rate"][1], log=True),
-            "scheduler_type": trial.suggest_categorical("scheduler_type", ss["scheduler_type"]),
+            "dropout":       trial.suggest_float("dropout", ss["dropout"][0], ss["dropout"][1]),
+            "batch_size":    trial.suggest_categorical("batch_size", ss["batch_size"]),
+            "weight_decay":  trial.suggest_float("weight_decay", ss["weight_decay"][0],
+                                                  ss["weight_decay"][1], log=True),
         }
 
         fold_f1s = []
@@ -369,6 +354,7 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
     if n_trials is not None:
         config["n_trials"] = n_trials
 
+    os.makedirs(config["optuna_dir"], exist_ok=True)
     os.makedirs(config["result_dir"], exist_ok=True)
     os.makedirs(config["log_dir"], exist_ok=True)
 
@@ -380,51 +366,81 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
     num_classes = len(label_encoder.classes_)
     print(f"Num classes: {num_classes}")
 
-    # --- Paper default params (no Optuna) ---
-    # paper: SGD lr=0.01, momentum=0.9; we use Adam with similar lr
-    best_params = {
-        "dropout": 0.5,
-        "batch_size": 32,
-        "learning_rate": 0.01,
-        "scheduler_type": "step",
-    }
-    print(f"[Paper params] {best_params}")
+    # --- Stratified dev / test split ---
+    dev_names, test_names, dev_labels, test_labels = train_test_split(
+        file_names, labels,
+        test_size=config["test_size"],
+        stratify=labels,
+        random_state=config["random_state"],
+    )
+    print(f"Dev: {len(dev_names)}  Test: {len(test_names)}")
 
-    # --- Optuna phase (commented out for now) ---
-    # os.makedirs(config["optuna_dir"], exist_ok=True)
-    # best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
-    # study_path = os.path.join(config["optuna_dir"], "study.pkl")
-    # if not eval_only:
-    #     print(f"\n[Optuna] Starting search: {config['n_trials']} trials, {config['n_splits']}-fold inner CV")
-    #     pruner = optuna.pruners.MedianPruner(n_warmup_steps=2)
-    #     study = optuna.create_study(direction="maximize", pruner=pruner,
-    #                                 study_name=f"malconv_{arch}")
-    #     objective = make_objective(file_names, labels, num_classes, config)
-    #     study.optimize(objective, n_trials=config["n_trials"],
-    #                    timeout=config["optuna_timeout"], show_progress_bar=True)
-    #     best_params = study.best_params
-    #     print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
-    #     print(f"[Optuna] Best params: {best_params}")
-    #     with open(study_path, "wb") as f:
-    #         pickle.dump(study, f)
-    #     with open(best_params_path, "w") as f:
-    #         json.dump(best_params, f, indent=2)
-    #     if tune_only:
-    #         return None
-    # else:
-    #     with open(best_params_path) as f:
-    #         best_params = json.load(f)
-    #     print(f"[Loaded] Best params: {best_params}")
+    best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
+    study_path = os.path.join(config["optuna_dir"], "study.pkl")
 
-    # --- Final CV evaluation ---
-    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold)...")
+    # --- Optuna phase ---
+    if not eval_only:
+        print(f"\n[Optuna] Starting search: {config['n_trials']} trials, {config['optuna_n_splits']}-fold inner CV")
+        pruner = optuna.pruners.MedianPruner(n_warmup_steps=2)
+        sampler = optuna.samplers.TPESampler(seed=config["random_state"])
+        study = optuna.create_study(direction="maximize", pruner=pruner, sampler=sampler,
+                                    study_name=f"malconv_{arch}")
+        objective = make_objective(dev_names, dev_labels, num_classes, config)
+        study.optimize(objective, n_trials=config["n_trials"],
+                       timeout=config["optuna_timeout"], show_progress_bar=True)
+        best_params = study.best_params
+        print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
+        print(f"[Optuna] Best params: {best_params}")
+        with open(study_path, "wb") as f:
+            pickle.dump(study, f)
+        with open(best_params_path, "w") as f:
+            json.dump(best_params, f, indent=2)
+        print(f"[Optuna] Study saved: {study_path}")
+        importances = optuna.importance.get_param_importances(study)
+        print("[Optuna] Parameter importances:")
+        for param, imp in importances.items():
+            print(f"  {param:20s}: {imp:.4f}")
+        if tune_only:
+            return None
+    else:
+        if not os.path.exists(best_params_path):
+            raise FileNotFoundError(f"Best params not found at {best_params_path}. Run without --eval-only first.")
+        with open(best_params_path) as f:
+            best_params = json.load(f)
+        print(f"[Loaded] Best params: {best_params}")
+
+    # --- Final CV evaluation (on dev set) ---
+    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold on dev)...")
     summary, fold_results = run_final_cv(
-        file_names, labels, label_encoder, num_classes, best_params, config
+        dev_names, dev_labels, label_encoder, num_classes, best_params, config
     )
 
     print(f"\n[{arch}] Final CV Summary ({config['n_splits']}-fold):")
     for m in ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]:
         print(f"  {m:12s}: {summary[f'avg_{m}']:.4f} ± {summary[f'std_{m}']:.4f}")
+
+    # --- Test evaluation ---
+    print(f"\n[Test] Training on 90% of dev (early stop on 10%), evaluating on held-out test set...")
+    device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
+    train_for_final, val_for_earlystop, labels_train_final, labels_val_earlystop = train_test_split(
+        dev_names, dev_labels,
+        test_size=0.1,
+        stratify=dev_labels,
+        random_state=config["random_state"],
+    )
+    _, best_state = train_fold(
+        train_for_final, labels_train_final,
+        val_for_earlystop, labels_val_earlystop,
+        best_params, num_classes, config,
+        seed=config["random_state"],
+    )
+    model = build_model(best_params, num_classes, config, device)
+    model.load_state_dict(best_state)
+    test_ds = RawByteDataset(test_names, test_labels, config["raw_byte_dir"], config["max_len"])
+    test_loader = torch.utils.data.DataLoader(test_ds, batch_size=best_params["batch_size"], shuffle=False)
+    test_results = test_model(model, test_loader, device, label_encoder)
+    print(f"[Test]  Acc={test_results['accuracy']:.4f}  F1-macro={test_results['f1_macro']:.4f}  "
+          f"AUC={test_results['auc']:.4f}")
 
     results_dict = {
         "mode": "Classification (family)",
@@ -447,6 +463,14 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
             }
             for i, r in enumerate(fold_results)
         ],
+        "test_results": {
+            "accuracy": test_results["accuracy"],
+            "precision": test_results["precision"],
+            "recall": test_results["recall"],
+            "f1_micro": test_results["f1_micro"],
+            "f1_macro": test_results["f1_macro"],
+            "auc": test_results["auc"],
+        },
     }
     save_results(results_dict, save_dir=config["result_dir"])
     return summary
