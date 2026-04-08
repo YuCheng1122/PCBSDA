@@ -18,7 +18,7 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 from torch_geometric.data import Batch
 
-from src.gnn.cross_architecture.utils import load_graphs_from_df
+from src.gnn.utils import load_graphs_from_df
 
 
 def load_domain_data(csv_path, graph_dir, cpus, cache_file, force_reload, classification):
@@ -133,11 +133,6 @@ def prepare_ccsa_data(config, random_state):
 
     return src_train, src_val, tgt_train, tgt_test, label_encoder, num_classes
 
-
-# ============================================================
-# CCSA Pair Dataset for PyG graphs
-# ============================================================
-
 class CCSAPairDataset(Dataset):
     """
     生成 source-target pair 用於 CCSA 訓練。
@@ -227,149 +222,6 @@ def csa_loss(src_feature, tgt_feature, class_eq, margin=1.0):
 #     # class_eq: 1=同類, 0=不同類 → 轉換成 1/-1
 #     target = class_eq * 2 - 1
 #     return F.cosine_embedding_loss(src_feature, tgt_feature, target, margin=margin)
-
-
-# def infonce_loss(src_features, tgt_features, src_labels, tgt_labels, temperature=0.1):
-#     """
-#     Supervised InfoNCE Loss for cross-domain alignment.
-#     - 每個 target sample 為 anchor
-#     - 同類的 source samples 為 positive，不同類為 negative
-#     - 在整個 batch 內做 softmax ranking，沒有 hard margin，gradient 不歸零
-#     - temperature 越小對齊越緊，建議 0.05~0.2
-#     """
-#     # L2 normalize features
-#     src_features = F.normalize(src_features, dim=1)
-#     tgt_features = F.normalize(tgt_features, dim=1)
-
-#     # similarity matrix: [num_tgt, num_src]
-#     sim_matrix = torch.mm(tgt_features, src_features.t()) / temperature
-
-#     # label match mask: [num_tgt, num_src], True if same class
-#     match_mask = tgt_labels.unsqueeze(1) == src_labels.unsqueeze(0)
-
-#     # 每個 target anchor 至少要有一個 positive source
-#     valid_anchors = match_mask.any(dim=1)
-#     if not valid_anchors.any():
-#         return torch.tensor(0.0, device=src_features.device)
-
-#     sim_matrix = sim_matrix[valid_anchors]
-#     match_mask = match_mask[valid_anchors]
-
-#     # InfoNCE: -log( sum(exp(pos)) / sum(exp(all)) )
-#     # 等價於 log_softmax 後取 positive 的平均
-#     log_prob = F.log_softmax(sim_matrix, dim=1)
-
-#     # 每個 anchor 的 positive 平均 log probability
-#     pos_log_prob = (log_prob * match_mask.float()).sum(dim=1) / match_mask.float().sum(dim=1)
-
-#     return -pos_log_prob.mean()
-
-
-def dsne_loss(src_features, tgt_features, src_labels, tgt_labels, margin=1.0, normalize=True):
-    """
-    d-SNE loss: modified-Hausdorff distance for domain adaptation (paper Eq. 6).
-
-    對每個 target sample x_j (label=k):
-      max_intra = max distance to same-class source
-      min_inter = min distance to different-class source
-      loss_j = clamp(margin - (min_inter - max_intra), min=0)
-
-    Args:
-        src_features: (N_s, F) source graph embeddings
-        tgt_features: (N_t, F) target graph embeddings
-        src_labels: (N_s,) source labels
-        tgt_labels: (N_t,) target labels
-        margin: minimum required gap between min_inter and max_intra
-        normalize: L2-normalize features before distance computation
-    """
-    if normalize:
-        src_features = F.normalize(src_features, dim=1)
-        tgt_features = F.normalize(tgt_features, dim=1)
-
-    # Pairwise L2-squared distance: (N_s, N_t)
-    # ||a - b||^2 = ||a||^2 + ||b||^2 - 2 * a·b
-    src_sq = src_features.pow(2).sum(dim=1, keepdim=True)      # (N_s, 1)
-    tgt_sq = tgt_features.pow(2).sum(dim=1, keepdim=True)      # (N_t, 1)
-    cross = src_features @ tgt_features.t()                     # (N_s, N_t)
-    dists = src_sq + tgt_sq.t() - 2 * cross                    # (N_s, N_t)
-    dists = dists.clamp(min=0)  # numerical stability
-
-    # Label match mask: (N_s, N_t), True if same class
-    same_mask = src_labels.unsqueeze(1) == tgt_labels.unsqueeze(0)  # (N_s, N_t)
-    diff_mask = ~same_mask
-
-    losses = []
-    n_tgt = tgt_features.size(0)
-
-    for j in range(n_tgt):
-        col = dists[:, j]           # (N_s,) distances to target j
-        same_j = same_mask[:, j]    # (N_s,) same-class mask
-        diff_j = diff_mask[:, j]    # (N_s,) diff-class mask
-
-        if not same_j.any() or not diff_j.any():
-            continue
-
-        max_intra = col[same_j].max()   # farthest same-class source
-        min_inter = col[diff_j].min()   # nearest different-class source
-
-        # Hinge loss: want min_inter - max_intra >= margin
-        loss_j = (margin - (min_inter - max_intra)).clamp(min=0)
-        losses.append(loss_j)
-
-    if len(losses) == 0:
-        return torch.tensor(0.0, device=src_features.device, requires_grad=True)
-
-    return torch.stack(losses).mean()
-
-
-def train_dsne_epoch(model, source_loader, target_batch, optimizer, ce_criterion,
-                     device, alpha, beta, dsne_margin, normalize_features=True):
-    """
-    d-SNE 訓練一個 epoch (paper Eq. 7):
-    loss = d-SNE + alpha * CE_source + beta * CE_target
-
-    每個 step: source mini-batch + ALL target samples (因為 target 只有 ~10 個)
-    """
-    model.train()
-    total_loss = 0
-    total_ce_src = 0
-    total_ce_tgt = 0
-    total_dsne = 0
-    num_samples = 0
-
-    for src_batch in source_loader:
-        src_batch = src_batch.to(device)
-
-        # Forward pass
-        src_pred, src_feat = model(src_batch.x, src_batch.edge_index, src_batch.batch)
-        tgt_pred, tgt_feat = model(target_batch.x, target_batch.edge_index, target_batch.batch)
-
-        # Source CE loss
-        ce_src = ce_criterion(src_pred, src_batch.y)
-
-        # Target CE loss
-        ce_tgt = ce_criterion(tgt_pred, target_batch.y)
-
-        # d-SNE loss
-        dsne = dsne_loss(src_feat, tgt_feat, src_batch.y, target_batch.y,
-                         margin=dsne_margin, normalize=normalize_features)
-
-        # Combined loss (paper Eq. 7)
-        loss = dsne + alpha * ce_src + beta * ce_tgt
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        batch_size = src_batch.num_graphs
-        total_loss += loss.item() * batch_size
-        total_ce_src += ce_src.item() * batch_size
-        total_ce_tgt += ce_tgt.item() * batch_size
-        total_dsne += dsne.item() * batch_size
-        num_samples += batch_size
-
-    return (total_loss / num_samples, total_ce_src / num_samples,
-            total_ce_tgt / num_samples, total_dsne / num_samples)
 
 
 def train_ccsa_epoch(model, pair_loader, optimizer, ce_criterion, device, alpha, margin):
