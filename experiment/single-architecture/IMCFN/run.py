@@ -2,7 +2,7 @@
 Single-Architecture Family Classification — IMCFN
 (Image-based Malware Classification using Fine-tuned CNN, Vasan et al. 2020)
 
-Pipeline: raw bytes → color image (jet colormap) → fine-tuned VGG16 → softmax
+Pipeline: 224×224 RGB PNG → ImageNet normalize → fine-tuned VGG16 → softmax
 
 Run from PCBSDA root:
     python experiment/single-architecture/IMCFN/run.py
@@ -37,35 +37,40 @@ from sklearn.metrics import (
 import pandas as pd
 
 from config import get_imcfn_single_config, ALL_ARCHS
-from model import IMCFN, binary_to_image
+from model import IMCFN
+from PIL import Image
+import torchvision.transforms as T
 
 
 # ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
 
+# ImageNet normalisation — same as used during VGG16 pretraining
+_TRANSFORM = T.Compose([
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]),
+])
+
+
 class MalwareImageDataset(Dataset):
     """
-    Loads raw byte .npy files and converts them on-the-fly to color images.
-    Each .npy file stores a 1-D uint8 array of raw binary bytes.
+    Loads pre-generated 224×224 RGB PNG malware images.
     """
 
-    def __init__(self, file_names, labels, raw_byte_dir, image_size):
+    def __init__(self, file_names, labels, image_dir):
         self.file_names = file_names
         self.labels = labels
-        self.raw_byte_dir = raw_byte_dir
-        self.image_size = image_size
+        self.image_dir = image_dir
 
     def __len__(self):
         return len(self.file_names)
 
     def __getitem__(self, idx):
-        path = os.path.join(self.raw_byte_dir, self.file_names[idx] + ".npy")
-        byte_arr = np.load(path)
-        # Ensure uint8 — some files may be stored as int64 byte values 0–255
-        byte_arr = byte_arr.astype(np.uint8)
-        img_tensor = binary_to_image(byte_arr, target_size=self.image_size)
-        return img_tensor, torch.tensor(self.labels[idx], dtype=torch.long)
+        path = os.path.join(self.image_dir, self.file_names[idx] + ".png")
+        img = Image.open(path).convert("RGB")
+        return _TRANSFORM(img), torch.tensor(self.labels[idx], dtype=torch.long)
 
 
 # ---------------------------------------------------------------------------
@@ -82,36 +87,14 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def build_model(params, num_classes, config, device):
-    model = IMCFN(
-        num_classes=num_classes,
-        dropout=params["dropout"],
-        image_size=config["image_size"],
-    )
-    return model.to(device)
-
-
-def build_scheduler(optimizer, config):
-    return torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=config.get("cosine_T_max", 25)
-    )
-
-
-def make_class_weights(labels, num_classes, device):
-    counts = torch.zeros(num_classes)
-    for l in labels:
-        counts[int(l)] += 1
-    weights = len(labels) / (num_classes * counts)
-    return weights.to(device)
-
 
 def load_data(config):
-    """Load CSV, filter by arch, intersect with available .npy files."""
+    """Load CSV, filter by arch, intersect with available PNG files."""
     df = pd.read_csv(config["csv_path"])
     df = df[df["CPU"].isin(config["source_cpus"])].reset_index(drop=True)
 
-    npy_dir = config["raw_byte_dir"]
-    available = set(f.replace(".npy", "") for f in os.listdir(npy_dir))
+    image_dir = config["image_dir"]
+    available = set(f.replace(".png", "") for f in os.listdir(image_dir))
     df = df[df["file_name"].isin(available)].reset_index(drop=True)
 
     print(f"Samples after filtering: {len(df)}")
@@ -200,25 +183,29 @@ def train_fold(train_names, train_labels, val_names, val_labels,
     set_seed(seed)
     device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
 
-    train_ds = MalwareImageDataset(train_names, train_labels,
-                                   config["raw_byte_dir"], config["image_size"])
-    val_ds   = MalwareImageDataset(val_names, val_labels,
-                                   config["raw_byte_dir"], config["image_size"])
+    train_ds = MalwareImageDataset(train_names, train_labels, config["image_dir"])
+    val_ds   = MalwareImageDataset(val_names, val_labels, config["image_dir"])
 
     train_loader = DataLoader(train_ds, batch_size=params["batch_size"], shuffle=True,
                               num_workers=config["num_workers"], pin_memory=config["pin_memory"])
     val_loader   = DataLoader(val_ds, batch_size=params["batch_size"], shuffle=False,
                               num_workers=config["num_workers"], pin_memory=config["pin_memory"])
 
-    model = build_model(params, num_classes, config, device)
+    model = IMCFN(num_classes=num_classes, dropout=params["dropout"]).to(device)
     optimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=params["learning_rate"],
         weight_decay=params.get("weight_decay", 0.0),
     )
-    scheduler = build_scheduler(optimizer, config)
-    class_weights = make_class_weights(train_labels, num_classes, device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.get("cosine_T_max", 25)
+    )
+    counts = torch.zeros(num_classes)
+    for l in train_labels:
+        counts[int(l)] += 1
+    criterion = nn.CrossEntropyLoss(
+        weight=(len(train_labels) / (num_classes * counts)).to(device)
+    )
 
     best_val_loss = float("inf")
     best_model_state = None
@@ -265,9 +252,9 @@ def make_objective(file_names, labels, num_classes, config):
             "learning_rate": trial.suggest_float("learning_rate", ss["learning_rate"][0],
                                                   ss["learning_rate"][1], log=True),
             "dropout":       trial.suggest_float("dropout", ss["dropout"][0], ss["dropout"][1]),
-            "batch_size":    trial.suggest_categorical("batch_size", ss["batch_size"]),
             "weight_decay":  trial.suggest_float("weight_decay", ss["weight_decay"][0],
                                                   ss["weight_decay"][1], log=True),
+            "batch_size":    config["batch_size"],
         }
 
         fold_f1s = []
@@ -313,12 +300,12 @@ def run_final_cv(file_names, labels, label_encoder, num_classes, best_params, co
             seed=config["random_state"] + fold_idx,
         )
 
-        model = build_model(best_params, num_classes, config, device)
+        model = IMCFN(num_classes=num_classes, dropout=best_params["dropout"]).to(device)
         model.load_state_dict(best_state)
 
         val_ds = MalwareImageDataset(
             names_arr[val_idx].tolist(), labels[val_idx],
-            config["raw_byte_dir"], config["image_size"],
+            config["image_dir"],
         )
         val_loader = DataLoader(val_ds, batch_size=best_params["batch_size"], shuffle=False)
         fold_res = test_model(model, val_loader, device, label_encoder)
@@ -441,10 +428,9 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
         best_params, num_classes, config,
         seed=config["random_state"],
     )
-    model = build_model(best_params, num_classes, config, device)
+    model = IMCFN(num_classes=num_classes, dropout=best_params["dropout"]).to(device)
     model.load_state_dict(best_state)
-    test_ds = MalwareImageDataset(test_names, test_labels,
-                                  config["raw_byte_dir"], config["image_size"])
+    test_ds = MalwareImageDataset(test_names, test_labels, config["image_dir"])
     test_loader = DataLoader(test_ds, batch_size=best_params["batch_size"], shuffle=False)
     test_results = test_model(model, test_loader, device, label_encoder)
     print(f"[Test]  Acc={test_results['accuracy']:.4f}  F1-macro={test_results['f1_macro']:.4f}  "

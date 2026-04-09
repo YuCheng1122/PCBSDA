@@ -18,11 +18,8 @@ def get_imcfn_single_config(arch="x86_64"):
 
         # Data paths
         "csv_path": f"{BASE_PATH}/datasets/csv/single_arch_dataset.csv",
-        # Each sample is stored as a .npy file of raw uint8 bytes (shape: (N,))
-        "raw_byte_dir": f"{BASE_PATH}/experiment/outputs/raw_data/single_architecture/MalConv/results_raw_byte",
-
-        # Image settings (paper: 224×224, jet colormap)
-        "image_size": 224,
+        # Each sample is a 224×224 RGB PNG already converted from binary
+        "image_dir": f"{BASE_PATH}/experiment/outputs/raw_data/single_architecture/IMCFN/results_image",
 
         # Cross-Validation
         "n_splits": 5,
@@ -34,10 +31,11 @@ def get_imcfn_single_config(arch="x86_64"):
         "n_trials": 10,
         "optuna_timeout": None,
 
+        "batch_size": 32,
+
         "search_space": {
             "learning_rate": [1e-5, 1e-3],   # log-uniform; paper uses 5e-6
             "dropout":       [0.3, 0.7],
-            "batch_size":    [16, 32],
             "weight_decay":  [1e-5, 1e-3],   # log-uniform
         },
 
