@@ -17,7 +17,7 @@ def get_malconv_single_config(arch="x86_64"):
 
         # Data paths
         "csv_path": f"{BASE_PATH}/datasets/csv/single_arch_dataset.csv",
-        "raw_byte_dir": f"{BASE_PATH}/experiment/outputs/malConv/raw_byte/results_raw_byte",
+        "raw_byte_dir": f"{BASE_PATH}/experiment/outputs/raw_data/single_architecture/MalConv/results_raw_byte",
 
         # Sequence truncation: same as MalConv paper (2MB).
         # Memory is managed by chunk-wise conv in model.forward(), not by truncation.
@@ -59,9 +59,9 @@ def get_malconv_single_config(arch="x86_64"):
         "device": "cuda",
 
         # Output paths
-        "optuna_dir": f"{BASE_PATH}/experiment/outputs/malConv/optuna/{arch_tag}",
-        "result_dir": f"{BASE_PATH}/experiment/outputs/malConv/results/{arch_tag}",
-        "log_dir": f"{BASE_PATH}/experiment/outputs/malConv/logs/{arch_tag}",
+        "optuna_dir": f"{BASE_PATH}/experiment/outputs/optuna/single_architecture/MalConv/{arch_tag}",
+        "result_dir": f"{BASE_PATH}/experiment/outputs/results/single_architecture/MalConv/{arch_tag}",
+        "log_dir":    f"{BASE_PATH}/experiment/outputs/logs/single_architecture/MalConv/{arch_tag}",
     }
 
     return config
