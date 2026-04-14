@@ -25,7 +25,7 @@ def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
         "n_trials": 20,
         "optuna_timeout": None,
         "test_size": 0.2,
-        "optuna_n_splits": 3,
+        "optuna_n_splits": 5,
 
         # Model fixed settings (from gnn_single.py)
         "model_type": "GAT",

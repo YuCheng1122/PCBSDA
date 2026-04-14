@@ -25,7 +25,7 @@ def get_w2v_single_config(arch="x86_64", w2v_model="cbow"):
         "n_trials": 20,
         "optuna_timeout": None,  # seconds, None = no limit
         "test_size": 0.2,
-        "optuna_n_splits": 3,
+        "optuna_n_splits": 5,
 
         # Model fixed settings (from gnn_single.py)
         "model_type": "GAT",

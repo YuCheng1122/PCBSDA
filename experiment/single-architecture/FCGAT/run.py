@@ -1,23 +1,28 @@
 """
-Single-Architecture Family Classification — Word2Vec Embedding
-- Optuna hyperparameter search (inner CV)
-- K-Fold cross-validation for final evaluation
+Single-Architecture Family Classification — FCGAT (Word2Vec CBOW + GAT + Set2Set)
+
+Pipeline per arch (Nested CV):
+  1. Outer 5-fold CV  — each fold splits all data into train (80%) and test (20%)
+  2. Optuna search    — on outer train fold, 5-fold inner CV, maximise F1-macro
+  3. Outer evaluation — retrain with best params on outer train fold, evaluate outer test fold
+  4. Summary          — mean ± std across 5 outer folds
 
 Run from PCBSDA root:
-    python experiment/single-architecture/Word2Vec/run.py
-    python experiment/single-architecture/Word2Vec/run.py --arch x86_64 --w2v-model cbow
-    python experiment/single-architecture/Word2Vec/run.py --arch x86_64 --tune-only
-    python experiment/single-architecture/Word2Vec/run.py --arch x86_64 --eval-only
+    python experiment/single-architecture/FCGAT/run.py
+    python experiment/single-architecture/FCGAT/run.py --arch x86_64
+    python experiment/single-architecture/FCGAT/run.py --arch x86_64 --tune-only
+    python experiment/single-architecture/FCGAT/run.py --arch x86_64 --eval-only
 """
 
 import sys
 import os
+import time
+import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 import argparse
 import copy
-import json
-import pickle
 import random
 
 import numpy as np
@@ -26,8 +31,10 @@ import optuna
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from torch_geometric.loader import DataLoader
+import pandas as pd
 
-from ours.src.gnn.models import GCN, GAT
+from model import FCGAT
+from config import get_fcgat_single_config, ALL_ARCHS
 from ours.src.gnn.utils import (
     load_graphs_from_df,
     train_epoch,
@@ -36,10 +43,6 @@ from ours.src.gnn.utils import (
     create_gnn_scheduler,
     save_experiment_results,
 )
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from config import get_w2v_single_config, ALL_ARCHS, W2V_MODELS
-
-import pandas as pd
 
 
 # ---------------------------------------------------------------------------
@@ -57,26 +60,20 @@ def set_seed(seed):
 
 
 def build_model(params, num_node_features, num_classes, device):
-    common = dict(
+    model = FCGAT(
         num_node_features=num_node_features,
         hidden_channels=params["hidden_channels"],
-        output_channels=params["output_channels"],
         num_classes=num_classes,
-        num_layers=params["num_layers"],
+        gat_heads=params.get("gat_heads", 3),
+        set2set_steps=params.get("set2set_steps", 4),
         dropout=params["dropout"],
-        pooling=params["pooling"],
     )
-    if params["model_type"] == "GAT":
-        model = GAT(**common, heads=params.get("gat_heads", 4))
-    else:
-        model = GCN(**common)
     return model.to(device)
 
 
 def build_scheduler(optimizer, params):
-    stype = params["scheduler_type"]
     return create_gnn_scheduler(
-        optimizer, stype,
+        optimizer, params["scheduler_type"],
         step_size=params.get("step_size", 30),
         gamma=params.get("gamma", 0.5),
         patience=params.get("plateau_patience", 10),
@@ -94,7 +91,6 @@ def make_class_weights(graphs, num_classes, device):
 
 
 def load_all_graphs(config):
-    """Load all graphs for the target architecture (no split yet)."""
     df = pd.read_csv(config["csv_path"])
     arch_df = df[df["CPU"].isin(config["source_cpus"])]
     print(f"Total samples for {config['source_cpus']}: {len(arch_df)}")
@@ -103,7 +99,6 @@ def load_all_graphs(config):
 
 
 def encode_labels(graphs, labels):
-    """Fit LabelEncoder and assign data.y in-place. Returns label_encoder, num_classes."""
     le = LabelEncoder()
     encoded = le.fit_transform(labels)
     for i, g in enumerate(graphs):
@@ -112,33 +107,39 @@ def encode_labels(graphs, labels):
 
 
 # ---------------------------------------------------------------------------
-# Single fold training — returns best val F1-macro
+# Single fold training
 # ---------------------------------------------------------------------------
 
-def train_fold(train_graphs, val_graphs, params, num_classes, config, seed=42):
+def train_fold(train_graphs, val_graphs, params, num_classes, config, seed=42, max_epochs=None):
     set_seed(seed)
     device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
 
     batch_size = params["batch_size"]
     train_loader = DataLoader(train_graphs, batch_size=batch_size, shuffle=True,
                               num_workers=config["num_workers"], pin_memory=config["pin_memory"])
-    val_loader = DataLoader(val_graphs, batch_size=batch_size, shuffle=False,
-                            num_workers=config["num_workers"], pin_memory=config["pin_memory"])
+    val_loader   = DataLoader(val_graphs,   batch_size=batch_size, shuffle=False,
+                              num_workers=config["num_workers"], pin_memory=config["pin_memory"])
 
-    model = build_model(params, config["num_node_features"], num_classes, device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=params["learning_rate"])
+    model     = build_model(params, config["num_node_features"], num_classes, device)
+    optimizer = torch.optim.AdamW(model.parameters(),
+                                  lr=params["learning_rate"],
+                                  weight_decay=params.get("weight_decay", 1e-2))
     scheduler = build_scheduler(optimizer, {**config, **params})
     class_weights = make_class_weights(train_graphs, num_classes, device)
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
-    best_val_loss = float("inf")
+    best_val_loss    = float("inf")
     best_model_state = None
     patience_counter = 0
-    patience = config["patience"]
+    patience         = config["patience"]
 
-    for epoch in range(1, config["epochs"] + 1):
+    n_epochs = max_epochs if max_epochs is not None else config["epochs"]
+
+    for epoch in range(1, n_epochs + 1):
+        t0 = time.time()
         train_epoch(model, train_loader, optimizer, criterion, device)
         val_acc, val_loss = evaluate(model, val_loader, device)
+        epoch_time = time.time() - t0
 
         if params["scheduler_type"] == "plateau":
             scheduler.step(val_loss)
@@ -146,18 +147,20 @@ def train_fold(train_graphs, val_graphs, params, num_classes, config, seed=42):
             scheduler.step()
 
         if val_loss < best_val_loss:
-            best_val_loss = val_loss
+            best_val_loss    = val_loss
             best_model_state = copy.deepcopy(model.state_dict())
             patience_counter = 0
         else:
             patience_counter += 1
 
         if patience_counter >= patience:
+            print(f"    early stop at epoch {epoch}  "
+                  f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}")
             break
 
-    # Evaluate best model on val set for metric
+    print(f"    finished  best_val_loss={best_val_loss:.4f}")
     model.load_state_dict(best_model_state)
-    label_encoder = LabelEncoder()  # dummy — test_model only needs classes count
+    label_encoder = LabelEncoder()
     label_encoder.classes_ = np.arange(num_classes)
     val_results = test_model(model, val_loader, device, label_encoder)
     return val_results["f1_macro"], best_model_state
@@ -170,32 +173,45 @@ def train_fold(train_graphs, val_graphs, params, num_classes, config, seed=42):
 def make_objective(dev_graphs, dev_labels_encoded, num_classes, config):
     skf = StratifiedKFold(n_splits=config["optuna_n_splits"], shuffle=True,
                           random_state=config["random_state"])
-    ss = config["search_space"]
+    ss       = config["search_space"]
+    n_trials = config["n_trials"]
 
     def objective(trial):
         params = {
-            "model_type": config["model_type"],
-            "pooling": config["pooling"],
-            "gat_heads": config["gat_heads"],
-            "scheduler_type": config["scheduler_type"],
+            # Fixed (paper)
+            "gat_heads":       config["gat_heads"],
+            "set2set_steps":   config["set2set_steps"],
             "hidden_channels": config["hidden_channels"],
-            "output_channels": config["output_channels"],
-            "batch_size": config["batch_size"],
-            "learning_rate": trial.suggest_float("learning_rate", ss["learning_rate"][0],
+            "dropout":         config["dropout"],
+            "scheduler_type":  config["scheduler_type"],
+            # Searched
+            "batch_size":    trial.suggest_categorical("batch_size",  ss["batch_size"]),
+            "learning_rate": trial.suggest_float("learning_rate",
+                                                  ss["learning_rate"][0],
                                                   ss["learning_rate"][1], log=True),
-            "num_layers": trial.suggest_int("num_layers", ss["num_layers"][0], ss["num_layers"][-1]),
-            "dropout": trial.suggest_float("dropout", ss["dropout"][0], ss["dropout"][1]),
+            "weight_decay":  trial.suggest_float("weight_decay",
+                                                  ss["weight_decay"][0],
+                                                  ss["weight_decay"][1], log=True),
         }
+
+        print(f"\n[Trial {trial.number+1}/{n_trials}] "
+              f"lr={params['learning_rate']:.2e}  "
+              f"wd={params['weight_decay']:.2e}  "
+              f"bs={params['batch_size']}")
 
         fold_f1s = []
         for fold_idx, (train_idx, val_idx) in enumerate(skf.split(dev_graphs, dev_labels_encoded)):
             train_g = [dev_graphs[i] for i in train_idx]
-            val_g = [dev_graphs[i] for i in val_idx]
-            f1, _ = train_fold(train_g, val_g, params, num_classes, config,
-                                seed=config["random_state"] + fold_idx)
+            val_g   = [dev_graphs[i] for i in val_idx]
+            f1, _   = train_fold(train_g, val_g, params, num_classes, config,
+                                  seed=config["random_state"] + fold_idx,
+                                  max_epochs=config["optuna_epochs"])
             fold_f1s.append(f1)
+            print(f"  fold {fold_idx+1}/{config['optuna_n_splits']}  "
+                  f"F1={f1:.4f}  mean={np.mean(fold_f1s):.4f}")
             trial.report(np.mean(fold_f1s), fold_idx)
             if trial.should_prune():
+                print("  → pruned")
                 raise optuna.exceptions.TrialPruned()
 
         return np.mean(fold_f1s)
@@ -204,7 +220,7 @@ def make_objective(dev_graphs, dev_labels_encoded, num_classes, config):
 
 
 # ---------------------------------------------------------------------------
-# Final CV evaluation with best params
+# Final CV evaluation
 # ---------------------------------------------------------------------------
 
 def run_final_cv(all_graphs, all_labels_encoded, label_encoder, num_classes, best_params, config):
@@ -216,11 +232,10 @@ def run_final_cv(all_graphs, all_labels_encoded, label_encoder, num_classes, bes
     for fold_idx, (train_idx, val_idx) in enumerate(skf.split(all_graphs, all_labels_encoded)):
         print(f"\n  [Fold {fold_idx+1}/{config['n_splits']}]")
         train_g = [all_graphs[i] for i in train_idx]
-        val_g = [all_graphs[i] for i in val_idx]
+        val_g   = [all_graphs[i] for i in val_idx]
         _, best_state = train_fold(train_g, val_g, best_params, num_classes, config,
                                    seed=config["random_state"] + fold_idx)
 
-        # Evaluate on val fold
         model = build_model(best_params, config["num_node_features"], num_classes, device)
         model.load_state_dict(best_state)
         val_loader = DataLoader(val_g, batch_size=best_params["batch_size"], shuffle=False)
@@ -243,20 +258,17 @@ def run_final_cv(all_graphs, all_labels_encoded, label_encoder, num_classes, bes
 # Main per-arch runner
 # ---------------------------------------------------------------------------
 
-def run_arch(arch, w2v_model, tune_only=False, eval_only=False, n_trials=None):
-    config = get_w2v_single_config(arch, w2v_model)
-    if n_trials is not None:
-        config["n_trials"] = n_trials
+def run_arch(arch, tune_only=False, eval_only=False):
+    config = get_fcgat_single_config(arch)
 
     os.makedirs(config["optuna_dir"], exist_ok=True)
     os.makedirs(config["result_dir"], exist_ok=True)
-    os.makedirs(config["log_dir"], exist_ok=True)
+    os.makedirs(config["log_dir"],    exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"Arch: {arch} | Embedding: {w2v_model}")
+    print(f"Arch: {arch} | FCGAT (CBOW vector_size=100)")
     print(f"{'='*60}")
 
-    # Load data
     all_graphs, all_labels = load_all_graphs(config)
     label_encoder, num_classes = encode_labels(all_graphs, all_labels)
     all_labels_encoded = np.array([int(g.y) for g in all_graphs])
@@ -264,51 +276,58 @@ def run_arch(arch, w2v_model, tune_only=False, eval_only=False, n_trials=None):
     print(f"Num classes: {num_classes}, Node feature dim: {config['num_node_features']}")
 
     best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
-    study_path = os.path.join(config["optuna_dir"], "study.pkl")
 
-    # --- Optuna phase (inner CV on all data) ---
+    # --- Optuna phase (on all data, inner CV) ---
     if not eval_only:
-        print(f"\n[Optuna] Starting search: {config['n_trials']} trials, {config['optuna_n_splits']}-fold inner CV")
-        pruner = optuna.pruners.MedianPruner(n_warmup_steps=2)
+        print(f"\n[Optuna] {config['n_trials']} trials, "
+              f"{config['optuna_n_splits']}-fold inner CV, "
+              f"max {config['optuna_epochs']} epochs/fold")
+        pruner  = optuna.pruners.MedianPruner(n_warmup_steps=2)
         sampler = optuna.samplers.TPESampler(seed=config["random_state"])
-        study = optuna.create_study(direction="maximize", pruner=pruner, sampler=sampler,
-                                    study_name=f"single_{w2v_model}_{arch}")
+        study   = optuna.create_study(direction="maximize", pruner=pruner, sampler=sampler,
+                                      study_name=f"fcgat_{arch}")
+
+        def trial_callback(study, trial):
+            if trial.state == optuna.trial.TrialState.COMPLETE:
+                print(f"  → Trial {trial.number+1} done  "
+                      f"F1={trial.value:.4f}  best={study.best_value:.4f}")
+
         objective = make_objective(all_graphs, all_labels_encoded, num_classes, config)
         study.optimize(objective, n_trials=config["n_trials"],
-                       timeout=config["optuna_timeout"], show_progress_bar=True)
+                       timeout=config["optuna_timeout"],
+                       show_progress_bar=False,
+                       callbacks=[trial_callback])
+
         print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
-        print(f"[Optuna] Best searched params: {study.best_params}")
+        print(f"[Optuna] Best params: {study.best_params}")
+
         best_params = {
-            "model_type": config["model_type"],
-            "pooling": config["pooling"],
-            "gat_heads": config["gat_heads"],
-            "scheduler_type": config["scheduler_type"],
+            # Fixed
+            "gat_heads":       config["gat_heads"],
+            "set2set_steps":   config["set2set_steps"],
             "hidden_channels": config["hidden_channels"],
-            "output_channels": config["output_channels"],
-            "batch_size": config["batch_size"],
+            "dropout":         config["dropout"],
+            "scheduler_type":  config["scheduler_type"],
+            # Best searched
             **study.best_params,
         }
-        with open(study_path, "wb") as f:
-            pickle.dump(study, f)
         with open(best_params_path, "w") as f:
             json.dump(best_params, f, indent=2)
-        print(f"[Optuna] Study saved: {study_path}")
-        importances = optuna.importance.get_param_importances(study)
-        print("[Optuna] Parameter importances:")
-        for param, imp in importances.items():
-            print(f"  {param:20s}: {imp:.4f}")
+        print(f"[Optuna] Best params saved: {best_params_path}")
+
         if tune_only:
             return None
     else:
         if not os.path.exists(best_params_path):
-            raise FileNotFoundError(f"Best params not found at {best_params_path}. Run without --eval-only first.")
+            raise FileNotFoundError(
+                f"Best params not found: {best_params_path}\n"
+                "Run without --eval-only first."
+            )
         with open(best_params_path) as f:
             best_params = json.load(f)
-        for key in ("model_type", "pooling", "gat_heads", "scheduler_type"):
-            best_params.setdefault(key, config[key])
         print(f"[Loaded] Best params: {best_params}")
 
-    # --- Outer CV evaluation (on all data) ---
+    # --- Outer CV evaluation ---
     print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold outer CV)...")
     summary, fold_results = run_final_cv(
         all_graphs, all_labels_encoded, label_encoder, num_classes, best_params, config
@@ -319,23 +338,23 @@ def run_arch(arch, w2v_model, tune_only=False, eval_only=False, n_trials=None):
         print(f"  {m:12s}: {summary[f'avg_{m}']:.4f} ± {summary[f'std_{m}']:.4f}")
 
     results_dict = {
-        "mode": "Classification (family)",
-        "arch_mode": "單架構",
-        "arch": arch,
-        "embedding": w2v_model,
+        "mode":        "Classification (family)",
+        "arch_mode":   "單架構",
+        "arch":        arch,
+        "embedding":   "fcgat_cbow",
         "source_cpus": config["source_cpus"],
-        "n_splits": config["n_splits"],
+        "n_splits":    config["n_splits"],
         "best_params": best_params,
         **summary,
         "all_results": [
             {
-                "fold": i,
-                "accuracy": r["accuracy"],
+                "fold":      i,
+                "accuracy":  r["accuracy"],
                 "precision": r["precision"],
-                "recall": r["recall"],
-                "f1_micro": r["f1_micro"],
-                "f1_macro": r["f1_macro"],
-                "auc": r["auc"],
+                "recall":    r["recall"],
+                "f1_micro":  r["f1_micro"],
+                "f1_macro":  r["f1_macro"],
+                "auc":       r["auc"],
             }
             for i, r in enumerate(fold_results)
         ],
@@ -349,28 +368,19 @@ def run_arch(arch, w2v_model, tune_only=False, eval_only=False, n_trials=None):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Single-arch family classification (Word2Vec + CV + Optuna)")
+    parser = argparse.ArgumentParser(description="Single-arch family classification (FCGAT)")
     parser.add_argument("--arch", type=str, default=None,
                         help=f"Target arch. If omitted, runs all: {ALL_ARCHS}")
-    parser.add_argument("--w2v-model", type=str, default="cbow", choices=W2V_MODELS,
-                        help="Word2Vec variant: cbow, skipgram, fast_text")
-    parser.add_argument("--n-trials", type=int, default=None,
-                        help="Override number of Optuna trials")
     parser.add_argument("--tune-only", action="store_true",
-                        help="Only run Optuna search, skip final CV evaluation")
+                        help="Only run Optuna search, skip final CV")
     parser.add_argument("--eval-only", action="store_true",
-                        help="Skip Optuna, load existing best_params and run final CV")
+                        help="Skip Optuna, load best_params and run final CV")
     args = parser.parse_args()
 
     archs = [args.arch] if args.arch else ALL_ARCHS
     summaries = {}
     for arch in archs:
-        summary = run_arch(
-            arch, args.w2v_model,
-            tune_only=args.tune_only,
-            eval_only=args.eval_only,
-            n_trials=args.n_trials,
-        )
+        summary = run_arch(arch, tune_only=args.tune_only, eval_only=args.eval_only)
         if summary:
             summaries[arch] = summary
 

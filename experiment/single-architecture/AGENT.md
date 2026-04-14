@@ -3,105 +3,30 @@
 ## 任務描述
 
 單架構惡意軟體家族分類（Single-Architecture Family Classification）。
-對同一 CPU 架構的資料做 dev/test 切分，進行 GNN-based 多分類任務。
+對同一 CPU 架構的資料做分類實驗，進行 GNN-based 多分類任務。
 
-## 實驗流程
+**資料集**：各惡意軟體家族平均取樣（per-family balanced sampling），確保類別均衡。
 
-1. **Dev / Test Split**：全部資料 stratified 切成 80% dev、20% held-out test（固定 seed=42）
-2. **Optuna 超參數搜尋**：在 dev 上做 3-fold inner CV，搜尋最佳超參數（20 trials）
-3. **Final CV 評估**：用 best params 在 dev 上做 5-fold CV，報告 mean ± std
-4. **Test 評估**：用 dev 90% train、10% early-stop，最終在 held-out test 評估一次
-5. **儲存結果**：metrics（accuracy、precision、recall、f1_micro、f1_macro、AUC）與 best params
+## 實驗流程（Nested Cross-Validation）
 
-## 目錄結構
+採用 **Nested CV** 框架，確保超參數選擇與最終評估完全分離：
 
-```
-single-architecture/
-├── AGENT.md
-├── Word2Vec/
-│   ├── config.py         ← Word2Vec 版本的 config
-│   └── run.py            ← Word2Vec 版本的主要執行腳本
-├── RoBERTa/
-│   ├── config.py         ← RoBERTa 版本的 config
-│   └── run.py            ← RoBERTa 版本的主要執行腳本
-└── ../scripts/single-architecture/
-    └── run_single_arch.sh  ← 依序執行 RoBERTa → Word2Vec，跑完寄 email
-```
+1. **外層 CV（評估）**：5-fold Stratified CV，每個 outer fold 的 test set 在整個流程中完全不可見
+2. **內層 CV（超參數選擇）**：在 outer train set 上再做 5-fold inner CV，以 F1-macro 為目標搜尋最佳超參數
+3. **Outer Fold 評估**：用 inner CV 選出的最佳超參數，在整個 outer train set 上重新訓練，於 outer test fold 評估
+4. **彙總結果**：5 個 outer fold 的 metrics 取 mean ± std 作為最終報告指標（accuracy、precision、recall、f1_micro、f1_macro、AUC）
 
-## 執行方式
+## 比較方法
 
-```bash
-# 單次執行（從 PCBSDA 根目錄）
-python experiment/single-architecture/RoBERTa/run.py --arch x86_64
-python experiment/single-architecture/Word2Vec/run.py --arch x86_64 --w2v-model cbow
+FCGAT、IMCFN、MalConv、GEMAL 均為比較的 baseline 論文，各自有獨立實作，透過 `/scripts/single-architecture/` 下的 shell script 執行，跑完自動寄信通知。
 
-# 跑所有架構
-python experiment/single-architecture/RoBERTa/run.py
-python experiment/single-architecture/Word2Vec/run.py
+## 規則
 
-# 只跑 Optuna（不做 Final CV）
-python experiment/single-architecture/RoBERTa/run.py --arch x86_64 --tune-only
-
-# 跳過 Optuna，載入已存的 best_params 直接做 Final CV + Test
-python experiment/single-architecture/RoBERTa/run.py --arch x86_64 --eval-only
-
-# 一鍵執行全部實驗 + 寄信通知
-bash experiment/scripts/single-architecture/run_single_arch.sh
-```
-
-## 關鍵設計
-
-### Data Split
-- 全部資料先用 `train_test_split(test_size=0.2, stratify=..., random_state=42)` 切出 held-out test set
-- Optuna 和 Final CV 只在 dev set（80%）上進行，test set 完全不碰直到最後
-
-### Optuna 超參數搜尋
-- 搜尋空間（3 個參數）：`learning_rate`（log-uniform）、`num_layers`（1~3）、`dropout`（0.1~0.5）
-- 固定不搜：`hidden_channels=256`、`batch_size=32`、`output_channels=256`
-- Inner CV：3-fold `StratifiedKFold`，objective 最大化 F1-macro
-- `n_trials=20`，`TPESampler(seed=42)` 固定取樣順序
-- 跑完自動印出 parameter importances
-- Study 儲存為 `study.pkl`，可事後用 `optuna.importance.get_param_importances(study)` 分析
-
-### Cross-Validation
-- Final CV：5-fold `StratifiedKFold` on dev，回報 mean ± std
-- 每個 fold seed = `random_state + fold_idx`（固定且可重現）
-
-### Seed 固定策略
-| 項目 | seed |
-|------|------|
-| Dev/Test split | `random_state=42` |
-| Optuna TPESampler | `seed=42` |
-| StratifiedKFold | `random_state=42` |
-| 每個 fold 的 train | `42 + fold_idx` |
-
-### Embedding 差異
-| | Word2Vec | RoBERTa |
-|---|---|---|
-| embedding dir | `ours/outputs/embedded_graphs/{cbow,skipgram,fast_text}` | `ours/outputs/embedded_graphs/roberta_20` |
-| node feature dim | 256 | 256 |
-| model type | GAT | GAT |
-
-## 程式碼依賴
-
-- `ours/src/gnn/models.py` → `GCN`, `GAT`
-- `ours/src/gnn/utils.py` → `load_graphs_from_df`, `train_epoch`, `evaluate`, `test_model`, `save_experiment_results`
-
-## 輸出路徑
-
-```
-experiment/outputs/
-├── results/
-│   ├── roberta/{roberta_tag}/{arch}/    ← RoBERTa 結果
-│   └── word2vec/{w2v_model}/{arch}/     ← Word2Vec 結果
-├── optuna/
-│   ├── roberta/{roberta_tag}/{arch}/
-│   │   ├── study.pkl
-│   │   └── best_params.json
-│   └── word2vec/{w2v_model}/{arch}/
-└── logs/
-    ├── roberta/{roberta_tag}/{arch}/
-    ├── word2vec/{w2v_model}/{arch}/
-    ├── roberta_run.log    ← run_single_arch.sh 的完整 stdout
-    └── w2v_run.log
-```
+- **資料隔離**：outer test fold 在 inner CV 超參數搜尋期間絕對不可接觸
+- **可重現性**：所有隨機性來源必須固定 seed
+  - Outer / Inner KFold：`random_state=42`
+  - Optuna TPESampler：`seed=42`
+  - 每個 fold 的模型訓練：`42 + fold_idx`
+- **評估指標**：統一回報 accuracy、precision、recall、f1_micro、f1_macro、AUC
+- **不修改原始實作**：baseline 論文的實作保留原始設定，僅套用 nested CV 評估框架
+- **結果儲存**：每個 outer fold 的 best_params 與 metrics 均需儲存，方便事後分析

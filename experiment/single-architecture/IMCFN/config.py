@@ -25,10 +25,10 @@ def get_imcfn_single_config(arch="x86_64"):
         "n_splits": 5,
         "random_state": 42,
         "test_size": 0.2,
-        "optuna_n_splits": 3,
+        "optuna_n_splits": 5,
 
         # Optuna — only tune dropout and learning rate; architecture is fixed by paper
-        "n_trials": 10,
+        "n_trials": 20,
         "optuna_timeout": None,
 
         "batch_size": 32,

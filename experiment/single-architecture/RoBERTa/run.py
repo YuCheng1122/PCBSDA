@@ -23,7 +23,7 @@ import random
 import numpy as np
 import torch
 import optuna
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from torch_geometric.loader import DataLoader
 
@@ -258,29 +258,17 @@ def run_arch(arch, roberta_tag, tune_only=False, eval_only=False, n_trials=None)
     config["num_node_features"] = all_graphs[0].x.shape[1]
     print(f"Num classes: {num_classes}, Node feature dim: {config['num_node_features']}")
 
-    # --- Stratified dev / test split ---
-    dev_indices, test_indices = train_test_split(
-        range(len(all_graphs)),
-        test_size=config["test_size"],
-        stratify=all_labels_encoded,
-        random_state=config["random_state"],
-    )
-    dev_graphs = [all_graphs[i] for i in dev_indices]
-    test_graphs = [all_graphs[i] for i in test_indices]
-    dev_labels_encoded = all_labels_encoded[list(dev_indices)]
-    print(f"Dev: {len(dev_graphs)}  Test: {len(test_graphs)}")
-
     best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
     study_path = os.path.join(config["optuna_dir"], "study.pkl")
 
-    # --- Optuna phase ---
+    # --- Optuna phase (inner CV on all data) ---
     if not eval_only:
         print(f"\n[Optuna] Starting search: {config['n_trials']} trials, {config['optuna_n_splits']}-fold inner CV")
         pruner = optuna.pruners.MedianPruner(n_warmup_steps=2)
         sampler = optuna.samplers.TPESampler(seed=config["random_state"])
         study = optuna.create_study(direction="maximize", pruner=pruner, sampler=sampler,
                                     study_name=f"single_{roberta_tag}_{arch}")
-        objective = make_objective(dev_graphs, dev_labels_encoded, num_classes, config)
+        objective = make_objective(all_graphs, all_labels_encoded, num_classes, config)
         study.optimize(objective, n_trials=config["n_trials"],
                        timeout=config["optuna_timeout"], show_progress_bar=True)
         print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
@@ -315,33 +303,15 @@ def run_arch(arch, roberta_tag, tune_only=False, eval_only=False, n_trials=None)
             best_params.setdefault(key, config[key])
         print(f"[Loaded] Best params: {best_params}")
 
-    # --- Final CV evaluation (on dev set) ---
-    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold on dev)...")
+    # --- Outer CV evaluation (on all data) ---
+    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold outer CV)...")
     summary, fold_results = run_final_cv(
-        dev_graphs, dev_labels_encoded, label_encoder, num_classes, best_params, config
+        all_graphs, all_labels_encoded, label_encoder, num_classes, best_params, config
     )
 
     print(f"\n[{arch}] Final CV Summary ({config['n_splits']}-fold):")
     for m in ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]:
         print(f"  {m:12s}: {summary[f'avg_{m}']:.4f} ± {summary[f'std_{m}']:.4f}")
-
-    # --- Test evaluation ---
-    print(f"\n[Test] Training on 90% of dev (early stop on 10%), evaluating on held-out test set...")
-    device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
-    train_for_final, val_for_earlystop = train_test_split(
-        dev_graphs,
-        test_size=0.1,
-        stratify=dev_labels_encoded,
-        random_state=config["random_state"],
-    )
-    _, best_state = train_fold(train_for_final, val_for_earlystop, best_params, num_classes, config,
-                               seed=config["random_state"])
-    model = build_model(best_params, config["num_node_features"], num_classes, device)
-    model.load_state_dict(best_state)
-    test_loader = DataLoader(test_graphs, batch_size=best_params["batch_size"], shuffle=False)
-    test_results = test_model(model, test_loader, device, label_encoder)
-    print(f"[Test]  Acc={test_results['accuracy']:.4f}  F1-macro={test_results['f1_macro']:.4f}  "
-          f"AUC={test_results['auc']:.4f}")
 
     results_dict = {
         "mode": "Classification (family)",
@@ -364,14 +334,6 @@ def run_arch(arch, roberta_tag, tune_only=False, eval_only=False, n_trials=None)
             }
             for i, r in enumerate(fold_results)
         ],
-        "test_results": {
-            "accuracy": test_results["accuracy"],
-            "precision": test_results["precision"],
-            "recall": test_results["recall"],
-            "f1_micro": test_results["f1_micro"],
-            "f1_macro": test_results["f1_macro"],
-            "auc": test_results["auc"],
-        },
     }
     save_experiment_results(results_dict, save_dir=config["result_dir"])
     return summary

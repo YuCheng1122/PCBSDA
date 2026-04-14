@@ -27,7 +27,7 @@ def get_malconv_single_config(arch="x86_64"):
         "n_splits": 5,
         "random_state": 42,
         "test_size": 0.2,
-        "optuna_n_splits": 3,
+        "optuna_n_splits": 5,
 
         # Architecture fixed per paper (filter_size=500, stride=500, 128 filters, embed_dim=8)
         # Paper used batch=256 on 8xGPU DGX-1; single RTX 3080 → batch 16-32
@@ -38,7 +38,7 @@ def get_malconv_single_config(arch="x86_64"):
         "stride": 500,
 
         # Optuna — only tune the parts not fixed by the paper
-        "n_trials": 10,
+        "n_trials": 20,
         "optuna_timeout": None,
 
         "search_space": {
