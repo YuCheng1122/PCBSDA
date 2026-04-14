@@ -35,7 +35,6 @@ def init_pretrain_components(config, model, tokenizer, train_dataset, eval_datas
         prediction_loss_only=True,
         lr_scheduler_type="linear",
         warmup_steps=config["warmup_steps"],
-        # Eval settings
         eval_strategy="epoch" if eval_dataset else "no",
     )
 
