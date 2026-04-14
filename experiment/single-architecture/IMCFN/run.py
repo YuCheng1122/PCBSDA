@@ -286,37 +286,75 @@ def make_objective(file_names, labels, num_classes, config):
 
 
 # ---------------------------------------------------------------------------
-# Final CV evaluation
+# Nested CV: Optuna per outer fold, evaluate on outer test set
 # ---------------------------------------------------------------------------
 
-def run_final_cv(file_names, labels, label_encoder, num_classes, best_params, config):
-    skf = StratifiedKFold(n_splits=config["n_splits"], shuffle=True,
-                          random_state=config["random_state"])
+def run_nested_cv(file_names, labels, label_encoder, num_classes, config):
+    """
+    True Nested CV:
+      - Outer loop: n_splits-fold stratified CV
+      - For each outer fold:
+          1. Run Optuna on outer train set (inner CV) to find best params
+          2. Retrain on entire outer train set with best params
+          3. Evaluate on outer test set (never seen during Optuna)
+    """
+    outer_skf = StratifiedKFold(n_splits=config["n_splits"], shuffle=True,
+                                random_state=config["random_state"])
     device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
     names_arr = np.array(file_names)
 
     fold_results = []
-    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(file_names, labels)):
-        print(f"\n  [Fold {fold_idx+1}/{config['n_splits']}]")
+    fold_best_params = []
+
+    for outer_idx, (train_idx, test_idx) in enumerate(
+            outer_skf.split(file_names, labels)):
+        print(f"\n{'─'*60}")
+        print(f"[Outer Fold {outer_idx+1}/{config['n_splits']}]  "
+              f"train={len(train_idx)}  test={len(test_idx)}")
+
+        outer_train_names = names_arr[train_idx].tolist()
+        outer_test_names  = names_arr[test_idx].tolist()
+        outer_train_y     = labels[train_idx]
+        outer_test_y      = labels[test_idx]
+
+        # ── Inner CV: Optuna on outer train set only ──────────────────────
+        print(f"  [Optuna] {config['n_trials']} trials, "
+              f"{config['optuna_n_splits']}-fold inner CV")
+        pruner  = optuna.pruners.MedianPruner(n_warmup_steps=2)
+        sampler = optuna.samplers.TPESampler(seed=config["random_state"])
+        study   = optuna.create_study(
+            direction="maximize", pruner=pruner, sampler=sampler,
+            study_name=f"imcfn_{config['source_cpus'][0]}_outer{outer_idx}",
+        )
+        objective = make_objective(
+            outer_train_names, outer_train_y, num_classes, config
+        )
+        study.optimize(objective, n_trials=config["n_trials"],
+                       timeout=config["optuna_timeout"], show_progress_bar=True)
+
+        best_params = {**study.best_params, "batch_size": config["batch_size"]}
+        print(f"  [Optuna] Best inner F1-macro={study.best_value:.4f}  "
+              f"params={best_params}")
+        fold_best_params.append(best_params)
+
+        # ── Retrain on full outer train set with best params ──────────────
+        print(f"  [Retrain] Training on full outer train set …")
         _, best_state = train_fold(
-            names_arr[train_idx].tolist(), labels[train_idx],
-            names_arr[val_idx].tolist(), labels[val_idx],
+            outer_train_names, outer_train_y,
+            outer_test_names,  outer_test_y,
             best_params, num_classes, config,
-            seed=config["random_state"] + fold_idx,
+            seed=config["random_state"] + outer_idx,
         )
 
+        # ── Evaluate on outer test set ────────────────────────────────────
         model = IMCFN(num_classes=num_classes, dropout=best_params["dropout"]).to(device)
         model.load_state_dict(best_state)
-
-        val_ds = MalwareImageDataset(
-            names_arr[val_idx].tolist(), labels[val_idx],
-            config["image_dir"],
-        )
-        val_loader = DataLoader(val_ds, batch_size=best_params["batch_size"], shuffle=False)
-        fold_res = test_model(model, val_loader, device, label_encoder)
+        test_ds = MalwareImageDataset(outer_test_names, outer_test_y, config["image_dir"])
+        test_loader = DataLoader(test_ds, batch_size=best_params["batch_size"], shuffle=False)
+        fold_res = test_model(model, test_loader, device, label_encoder)
         fold_results.append(fold_res)
-        print(f"    Acc={fold_res['accuracy']:.4f}  F1-macro={fold_res['f1_macro']:.4f}  "
-              f"AUC={fold_res['auc']:.4f}")
+        print(f"  [Outer {outer_idx+1}] Acc={fold_res['accuracy']:.4f}  "
+              f"F1-macro={fold_res['f1_macro']:.4f}  AUC={fold_res['auc']:.4f}")
 
     metrics = ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]
     summary = {}
@@ -325,7 +363,7 @@ def run_final_cv(file_names, labels, label_encoder, num_classes, best_params, co
         summary[f"avg_{m}"] = float(np.mean(vals))
         summary[f"std_{m}"] = float(np.std(vals))
 
-    return summary, fold_results
+    return summary, fold_results, fold_best_params
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +383,7 @@ def save_results(results_dict, save_dir):
 # Main per-arch runner
 # ---------------------------------------------------------------------------
 
-def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
+def run_arch(arch, n_trials=None):
     config = get_imcfn_single_config(arch)
     if n_trials is not None:
         config["n_trials"] = n_trials
@@ -362,51 +400,15 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
     num_classes = len(label_encoder.classes_)
     print(f"Num classes: {num_classes}  Total: {len(file_names)}")
 
-    best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
-    study_path       = os.path.join(config["optuna_dir"], "study.pkl")
-
-    # --- Optuna phase (inner CV on all data) ---
-    if not eval_only:
-        print(f"\n[Optuna] Starting search: {config['n_trials']} trials, "
-              f"{config['optuna_n_splits']}-fold inner CV")
-        pruner  = optuna.pruners.MedianPruner(n_warmup_steps=2)
-        sampler = optuna.samplers.TPESampler(seed=config["random_state"])
-        study   = optuna.create_study(direction="maximize", pruner=pruner, sampler=sampler,
-                                      study_name=f"imcfn_{arch}")
-        objective = make_objective(file_names, labels, num_classes, config)
-        study.optimize(objective, n_trials=config["n_trials"],
-                       timeout=config["optuna_timeout"], show_progress_bar=True)
-        best_params = {**study.best_params, "batch_size": config["batch_size"]}
-        print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
-        print(f"[Optuna] Best params: {best_params}")
-        with open(study_path, "wb") as f:
-            pickle.dump(study, f)
-        with open(best_params_path, "w") as f:
-            json.dump(best_params, f, indent=2)
-        print(f"[Optuna] Study saved: {study_path}")
-        importances = optuna.importance.get_param_importances(study)
-        print("[Optuna] Parameter importances:")
-        for param, imp in importances.items():
-            print(f"  {param:20s}: {imp:.4f}")
-        if tune_only:
-            return None
-    else:
-        if not os.path.exists(best_params_path):
-            raise FileNotFoundError(
-                f"Best params not found at {best_params_path}. Run without --eval-only first."
-            )
-        with open(best_params_path) as f:
-            best_params = json.load(f)
-        best_params.setdefault("batch_size", config["batch_size"])
-        print(f"[Loaded] Best params: {best_params}")
-
-    # --- Outer CV evaluation (on all data) ---
-    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold outer CV)...")
-    summary, fold_results = run_final_cv(
-        file_names, labels, label_encoder, num_classes, best_params, config
+    # --- Nested CV (Optuna inside each outer fold) ---
+    print(f"\n[Nested CV] {config['n_splits']}-fold outer × "
+          f"{config['optuna_n_splits']}-fold inner, "
+          f"{config['n_trials']} Optuna trials/fold")
+    summary, fold_results, fold_best_params = run_nested_cv(
+        file_names, labels, label_encoder, num_classes, config
     )
 
-    print(f"\n[{arch}] Final CV Summary ({config['n_splits']}-fold):")
+    print(f"\n[{arch}] Nested CV Summary ({config['n_splits']}-fold):")
     for m in ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]:
         print(f"  {m:12s}: {summary[f'avg_{m}']:.4f} ± {summary[f'std_{m}']:.4f}")
 
@@ -418,11 +420,12 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
         "embedding": "binary_color_image",
         "source_cpus": config["source_cpus"],
         "n_splits": config["n_splits"],
-        "best_params": best_params,
+        "fold_best_params": fold_best_params,
         **summary,
         "all_results": [
             {
                 "fold": i,
+                "best_params": fold_best_params[i],
                 "accuracy":  r["accuracy"],
                 "precision": r["precision"],
                 "recall":    r["recall"],
@@ -443,27 +446,18 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Single-arch family classification (IMCFN: binary → color image → VGG16)"
+        description="Single-arch family classification (IMCFN: binary → color image → VGG16, Nested CV)"
     )
     parser.add_argument("--arch", type=str, default=None,
                         help=f"Target arch. If omitted, runs all: {ALL_ARCHS}")
     parser.add_argument("--n-trials", type=int, default=None,
                         help="Override number of Optuna trials")
-    parser.add_argument("--tune-only", action="store_true",
-                        help="Only run Optuna search, skip final CV evaluation")
-    parser.add_argument("--eval-only", action="store_true",
-                        help="Skip Optuna, load existing best_params and run final CV")
     args = parser.parse_args()
 
     archs = [args.arch] if args.arch else ALL_ARCHS
     summaries = {}
     for arch in archs:
-        summary = run_arch(
-            arch,
-            tune_only=args.tune_only,
-            eval_only=args.eval_only,
-            n_trials=args.n_trials,
-        )
+        summary = run_arch(arch, n_trials=args.n_trials)
         if summary:
             summaries[arch] = summary
 

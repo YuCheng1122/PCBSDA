@@ -17,7 +17,7 @@ Run from PCBSDA root:
 import sys
 import os
 import time
-import json
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
@@ -222,30 +222,85 @@ def make_objective(dev_graphs: list, dev_labels_encoded: np.ndarray,
 
 
 # ---------------------------------------------------------------------------
-# Final CV evaluation
+# Nested CV: Optuna per outer fold, evaluate on outer test set
 # ---------------------------------------------------------------------------
 
-def run_final_cv(all_graphs: list, all_labels_encoded: np.ndarray,
-                 label_encoder, num_classes: int, best_params: dict, config: dict):
-    skf = StratifiedKFold(n_splits=config["n_splits"], shuffle=True,
-                          random_state=config["random_state"])
+def run_nested_cv(all_graphs: list, all_labels_encoded: np.ndarray,
+                  label_encoder, num_classes: int, config: dict):
+    """
+    True Nested CV:
+      - Outer loop: n_splits-fold stratified CV
+      - For each outer fold:
+          1. Run Optuna on outer train set (inner CV) to find best params
+          2. Retrain on entire outer train set with best params
+          3. Evaluate on outer test set (never seen during Optuna)
+    """
+    outer_skf = StratifiedKFold(n_splits=config["n_splits"], shuffle=True,
+                                random_state=config["random_state"])
     device = torch.device(config["device"] if torch.cuda.is_available() else "cpu")
 
     fold_results = []
-    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(all_graphs, all_labels_encoded)):
-        print(f"\n  [Fold {fold_idx+1}/{config['n_splits']}]")
-        train_g = [all_graphs[i] for i in train_idx]
-        val_g   = [all_graphs[i] for i in val_idx]
-        _, best_state = train_fold(train_g, val_g, best_params, num_classes, config,
-                                   seed=config["random_state"] + fold_idx)
+    fold_best_params = []
 
+    for outer_idx, (train_idx, test_idx) in enumerate(
+            outer_skf.split(all_graphs, all_labels_encoded)):
+        print(f"\n{'─'*60}")
+        print(f"[Outer Fold {outer_idx+1}/{config['n_splits']}]  "
+              f"train={len(train_idx)}  test={len(test_idx)}")
+
+        outer_train_g = [all_graphs[i] for i in train_idx]
+        outer_test_g  = [all_graphs[i] for i in test_idx]
+        outer_train_y = all_labels_encoded[train_idx]
+
+        # ── Inner CV: Optuna on outer train set only ──────────────────────
+        print(f"  [Optuna] {config['n_trials']} trials, "
+              f"{config['optuna_n_splits']}-fold inner CV, "
+              f"max {config['optuna_epochs']} epochs/fold")
+        pruner  = optuna.pruners.MedianPruner(n_warmup_steps=2)
+        sampler = optuna.samplers.TPESampler(seed=config["random_state"])
+        study   = optuna.create_study(
+            direction="maximize", pruner=pruner, sampler=sampler,
+            study_name=f"gemal_{config['source_cpus'][0]}_outer{outer_idx}",
+        )
+
+        def trial_callback(study, trial):
+            if trial.state == optuna.trial.TrialState.COMPLETE:
+                print(f"    → Trial {trial.number+1} done  "
+                      f"F1={trial.value:.4f}  best={study.best_value:.4f}")
+
+        objective = make_objective(outer_train_g, outer_train_y, num_classes, config)
+        study.optimize(objective, n_trials=config["n_trials"],
+                       timeout=config["optuna_timeout"],
+                       show_progress_bar=False,
+                       callbacks=[trial_callback])
+
+        best_params = {
+            "hidden_channels": config["hidden_channels"],
+            "embed_dim":       config["embed_dim"],
+            "dropout":         config["dropout"],
+            "scheduler_type":  config["scheduler_type"],
+            **study.best_params,
+        }
+        print(f"  [Optuna] Best inner F1-macro={study.best_value:.4f}  "
+              f"params={study.best_params}")
+        fold_best_params.append(best_params)
+
+        # ── Retrain on full outer train set with best params ──────────────
+        print(f"  [Retrain] Training on full outer train set …")
+        _, best_state = train_fold(
+            outer_train_g, outer_test_g, best_params, num_classes, config,
+            seed=config["random_state"] + outer_idx,
+        )
+
+        # ── Evaluate on outer test set ────────────────────────────────────
         model = build_model(best_params, config["num_node_features"], num_classes, device)
         model.load_state_dict(best_state)
-        val_loader = DataLoader(val_g, batch_size=best_params["batch_size"], shuffle=False)
-        fold_res = test_model(model, val_loader, device, label_encoder)
+        test_loader = DataLoader(outer_test_g, batch_size=best_params["batch_size"],
+                                 shuffle=False)
+        fold_res = test_model(model, test_loader, device, label_encoder)
         fold_results.append(fold_res)
-        print(f"    Acc={fold_res['accuracy']:.4f}  F1-macro={fold_res['f1_macro']:.4f}  "
-              f"AUC={fold_res['auc']:.4f}")
+        print(f"  [Outer {outer_idx+1}] Acc={fold_res['accuracy']:.4f}  "
+              f"F1-macro={fold_res['f1_macro']:.4f}  AUC={fold_res['auc']:.4f}")
 
     metrics = ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]
     summary = {}
@@ -254,14 +309,14 @@ def run_final_cv(all_graphs: list, all_labels_encoded: np.ndarray,
         summary[f"avg_{m}"] = float(np.mean(vals))
         summary[f"std_{m}"] = float(np.std(vals))
 
-    return summary, fold_results
+    return summary, fold_results, fold_best_params
 
 
 # ---------------------------------------------------------------------------
 # Main per-arch runner
 # ---------------------------------------------------------------------------
 
-def run_arch(arch: str, tune_only: bool = False, eval_only: bool = False):
+def run_arch(arch: str):
     config = get_gemal_single_config(arch)
 
     os.makedirs(config["optuna_dir"], exist_ok=True)
@@ -280,70 +335,15 @@ def run_arch(arch: str, tune_only: bool = False, eval_only: bool = False):
     config["num_node_features"] = all_graphs[0].x.shape[1]
     print(f"Num classes: {num_classes}, Node feature dim: {config['num_node_features']}")
 
-    best_params_path = os.path.join(config["optuna_dir"], "best_params.json")
-
-    # ── Optuna phase (on all data, inner CV) ────────────────────────────────
-    if not eval_only:
-        print(f"\n[Optuna] {config['n_trials']} trials, "
-              f"{config['optuna_n_splits']}-fold inner CV, "
-              f"max {config['optuna_epochs']} epochs/fold")
-        pruner  = optuna.pruners.MedianPruner(n_warmup_steps=2)
-        sampler = optuna.samplers.TPESampler(seed=config["random_state"])
-        study   = optuna.create_study(direction="maximize", pruner=pruner,
-                                      sampler=sampler, study_name=f"gemal_{arch}")
-
-        def trial_callback(study, trial):
-            if trial.state == optuna.trial.TrialState.COMPLETE:
-                print(f"  → Trial {trial.number+1} done  "
-                      f"F1={trial.value:.4f}  best={study.best_value:.4f}")
-
-        objective = make_objective(all_graphs, all_labels_encoded, num_classes, config)
-        study.optimize(objective, n_trials=config["n_trials"],
-                       timeout=config["optuna_timeout"],
-                       show_progress_bar=False,
-                       callbacks=[trial_callback])
-
-        print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
-        print(f"[Optuna] Best params: {study.best_params}")
-
-        try:
-            importances = optuna.importance.get_param_importances(study)
-            print(f"[Optuna] Parameter importances: {importances}")
-        except Exception:
-            pass
-
-        best_params = {
-            # Fixed
-            "hidden_channels": config["hidden_channels"],
-            "embed_dim":       config["embed_dim"],
-            "dropout":         config["dropout"],
-            "scheduler_type":  config["scheduler_type"],
-            # Best searched
-            **study.best_params,
-        }
-        with open(best_params_path, "w") as f:
-            json.dump(best_params, f, indent=2)
-        print(f"[Optuna] Best params saved: {best_params_path}")
-
-        if tune_only:
-            return None
-    else:
-        if not os.path.exists(best_params_path):
-            raise FileNotFoundError(
-                f"Best params not found: {best_params_path}\n"
-                "Run without --eval-only first."
-            )
-        with open(best_params_path) as f:
-            best_params = json.load(f)
-        print(f"[Loaded] Best params: {best_params}")
-
-    # ── Outer CV evaluation ──────────────────────────────────────────────────
-    print(f"\n[Final CV] Evaluating with best params ({config['n_splits']}-fold outer CV)...")
-    summary, fold_results = run_final_cv(
-        all_graphs, all_labels_encoded, label_encoder, num_classes, best_params, config
+    # ── Nested CV ────────────────────────────────────────────────────────────
+    print(f"\n[Nested CV] {config['n_splits']}-fold outer × "
+          f"{config['optuna_n_splits']}-fold inner, "
+          f"{config['n_trials']} Optuna trials/fold")
+    summary, fold_results, fold_best_params = run_nested_cv(
+        all_graphs, all_labels_encoded, label_encoder, num_classes, config
     )
 
-    print(f"\n[{arch}] Final CV Summary ({config['n_splits']}-fold):")
+    print(f"\n[{arch}] Nested CV Summary ({config['n_splits']}-fold):")
     for m in ["accuracy", "precision", "recall", "f1_micro", "f1_macro", "auc"]:
         print(f"  {m:12s}: {summary[f'avg_{m}']:.4f} ± {summary[f'std_{m}']:.4f}")
 
@@ -355,17 +355,18 @@ def run_arch(arch: str, tune_only: bool = False, eval_only: bool = False):
         "model":      "GEMAL (GCN + attention readout)",
         "source_cpus": config["source_cpus"],
         "n_splits":    config["n_splits"],
-        "best_params": best_params,
+        "fold_best_params": fold_best_params,
         **summary,
         "all_results": [
             {
-                "fold":      i,
-                "accuracy":  r["accuracy"],
-                "precision": r["precision"],
-                "recall":    r["recall"],
-                "f1_micro":  r["f1_micro"],
-                "f1_macro":  r["f1_macro"],
-                "auc":       r["auc"],
+                "fold":       i,
+                "best_params": fold_best_params[i],
+                "accuracy":   r["accuracy"],
+                "precision":  r["precision"],
+                "recall":     r["recall"],
+                "f1_micro":   r["f1_micro"],
+                "f1_macro":   r["f1_macro"],
+                "auc":        r["auc"],
             }
             for i, r in enumerate(fold_results)
         ],
@@ -380,19 +381,15 @@ def run_arch(arch: str, tune_only: bool = False, eval_only: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Single-arch family classification (GEMAL — GCN + attention readout)")
+        description="Single-arch family classification (GEMAL — GCN + attention readout, Nested CV)")
     parser.add_argument("--arch", type=str, default=None,
                         help=f"Target arch. If omitted, runs all: {ALL_ARCHS}")
-    parser.add_argument("--tune-only", action="store_true",
-                        help="Only run Optuna search, skip final evaluation")
-    parser.add_argument("--eval-only", action="store_true",
-                        help="Skip Optuna, load best_params and run test evaluation")
     args = parser.parse_args()
 
     archs = [args.arch] if args.arch else ALL_ARCHS
     summaries = {}
     for arch in archs:
-        summary = run_arch(arch, tune_only=args.tune_only, eval_only=args.eval_only)
+        summary = run_arch(arch)
         if summary:
             summaries[arch] = summary
 
