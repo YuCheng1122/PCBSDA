@@ -175,7 +175,10 @@ def load_graphs_from_df(df, graph_dir, classification=False, log_dir=None):
 
         node_features = np.array([fcg.nodes[n]['x'] for n in fcg.nodes()])
         for n in fcg.nodes():
-            fcg.nodes[n].pop('x', None)
+            attrs = fcg.nodes[n]
+            attrs.pop('x', None)
+            attrs.pop('tokens', None)
+            attrs.pop('function_name', None)
         torch_data = from_networkx(fcg)
         torch_data.x = torch.tensor(node_features, dtype=torch.float)
         graphs.append(torch_data)
@@ -305,7 +308,8 @@ def test_model(model, test_loader, device, label_encoder):
         auc_score = roc_auc_score(y_true, y_prob_array, multi_class='ovr', average='macro')
 
     report = classification_report(y_true, y_pred,
-                                   target_names=[str(c) for c in label_encoder.classes_])
+                                   target_names=[str(c) for c in label_encoder.classes_],
+                                   zero_division=0)
 
     original_labels = label_encoder.inverse_transform(sorted(set(y_true + y_pred)))
     cm = confusion_matrix(y_true, y_pred, labels=label_encoder.transform(original_labels))
