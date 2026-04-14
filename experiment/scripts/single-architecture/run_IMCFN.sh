@@ -16,7 +16,7 @@ echo "[$START_TIME] ===== Start ====="
 
 # --- IMCFN ---
 echo "[$(date '+%H:%M:%S')] Running IMCFN..."
-conda run -n PcodeBERT python experiment/single-architecture/IMCFN/run.py 2>&1 | tee "$LOG_FILE"
+conda run --no-capture-output -n PcodeBERT python -u experiment/single-architecture/IMCFN/run.py 2>/dev/tty | tee "$LOG_FILE"
 IMCFN_EXIT=${PIPESTATUS[0]}
 echo "[$(date '+%H:%M:%S')] IMCFN done (exit $IMCFN_EXIT)"
 

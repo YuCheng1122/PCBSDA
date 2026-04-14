@@ -27,21 +27,22 @@ def get_imcfn_single_config(arch="x86_64"):
         "test_size": 0.2,
         "optuna_n_splits": 5,
 
-        # Optuna — only tune dropout and learning rate; architecture is fixed by paper
+        # Optuna
         "n_trials": 20,
         "optuna_timeout": None,
 
-        "batch_size": 32,
+        "batch_size": 32,  # default fallback; overridden by search_space
 
         "search_space": {
             "learning_rate": [1e-5, 1e-3],   # log-uniform; paper uses 5e-6
             "dropout":       [0.3, 0.7],
             "weight_decay":  [1e-5, 1e-3],   # log-uniform
+            "batch_size":    [16, 32, 64],   # categorical
         },
 
         # Training (fixed)
         "scheduler_type": "cosine",
-        "num_workers": 4,
+        "num_workers": 12,
         "pin_memory": True,
         "epochs": 50,
         "patience": 10,

@@ -13,6 +13,7 @@ Run from PCBSDA root:
 
 import sys
 import os
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -24,6 +25,7 @@ import random
 import datetime
 
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -108,15 +110,17 @@ def load_data(config):
 # Training / evaluation
 # ---------------------------------------------------------------------------
 
-def train_epoch(model, loader, optimizer, criterion, device):
+def train_epoch(model, loader, optimizer, criterion, device, epoch, total_epochs):
     model.train()
-    for x, y in loader:
+    pbar = tqdm(loader, desc=f"Epoch {epoch:3d}/{total_epochs}", leave=False, unit="batch")
+    for x, y in pbar:
         x, y = x.to(device), y.to(device)
         optimizer.zero_grad()
         logits = model(x)
         loss = criterion(logits, y)
         loss.backward()
         optimizer.step()
+        pbar.set_postfix(loss=f"{loss.item():.4f}")
 
 
 def evaluate(model, loader, device):
@@ -213,7 +217,7 @@ def train_fold(train_names, train_labels, val_names, val_labels,
     patience = config["patience"]
 
     for epoch in range(1, config["epochs"] + 1):
-        train_epoch(model, train_loader, optimizer, criterion, device)
+        train_epoch(model, train_loader, optimizer, criterion, device, epoch, config["epochs"])
         val_acc, val_loss = evaluate(model, val_loader, device)
         scheduler.step()
 
@@ -225,7 +229,8 @@ def train_fold(train_names, train_labels, val_names, val_labels,
         else:
             patience_counter += 1
 
-        print(f"    Epoch {epoch:3d}/{config['epochs']} | val_loss={val_loss:.4f}  val_acc={val_acc:.4f}  patience={patience_counter}/{patience}{'  *' if improved else ''}")
+        if improved or patience_counter >= patience:
+            print(f"    Epoch {epoch:3d}/{config['epochs']} | val_loss={val_loss:.4f}  val_acc={val_acc:.4f}  patience={patience_counter}/{patience}{'  *' if improved else ''}")
 
         if patience_counter >= patience:
             print(f"    Early stop at epoch {epoch}")
@@ -254,7 +259,7 @@ def make_objective(file_names, labels, num_classes, config):
             "dropout":       trial.suggest_float("dropout", ss["dropout"][0], ss["dropout"][1]),
             "weight_decay":  trial.suggest_float("weight_decay", ss["weight_decay"][0],
                                                   ss["weight_decay"][1], log=True),
-            "batch_size":    config["batch_size"],
+            "batch_size":    trial.suggest_categorical("batch_size", ss["batch_size"]),
         }
 
         fold_f1s = []
@@ -371,7 +376,7 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
         objective = make_objective(file_names, labels, num_classes, config)
         study.optimize(objective, n_trials=config["n_trials"],
                        timeout=config["optuna_timeout"], show_progress_bar=True)
-        best_params = study.best_params
+        best_params = {**study.best_params, "batch_size": config["batch_size"]}
         print(f"\n[Optuna] Best F1-macro: {study.best_value:.4f}")
         print(f"[Optuna] Best params: {best_params}")
         with open(study_path, "wb") as f:
@@ -392,6 +397,7 @@ def run_arch(arch, tune_only=False, eval_only=False, n_trials=None):
             )
         with open(best_params_path) as f:
             best_params = json.load(f)
+        best_params.setdefault("batch_size", config["batch_size"])
         print(f"[Loaded] Best params: {best_params}")
 
     # --- Outer CV evaluation (on all data) ---
