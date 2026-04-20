@@ -332,7 +332,7 @@ def run_nested_cv(file_names, labels, label_encoder, num_classes, config):
         study.optimize(objective, n_trials=config["n_trials"],
                        timeout=config["optuna_timeout"], show_progress_bar=True)
 
-        best_params = {**study.best_params, "batch_size": config["batch_size"]}
+        best_params = {**study.best_params}
         print(f"  [Optuna] Best inner F1-macro={study.best_value:.4f}  "
               f"params={best_params}")
         fold_best_params.append(best_params)

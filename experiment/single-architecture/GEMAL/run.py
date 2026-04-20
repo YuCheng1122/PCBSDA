@@ -351,7 +351,7 @@ def run_arch(arch: str):
         "mode":       "Classification (family)",
         "arch_mode":  "單架構",
         "arch":       arch,
-        "embedding":  "fcgat_cbow",
+        "embedding":  "gemal_cbow",
         "model":      "GEMAL (GCN + attention readout)",
         "source_cpus": config["source_cpus"],
         "n_splits":    config["n_splits"],

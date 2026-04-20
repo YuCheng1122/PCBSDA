@@ -37,7 +37,7 @@ def get_imcfn_single_config(arch="x86_64"):
             "learning_rate": [1e-5, 1e-3],   # log-uniform; paper uses 5e-6
             "dropout":       [0.3, 0.7],
             "weight_decay":  [1e-5, 1e-3],   # log-uniform
-            "batch_size":    [16, 32, 64],   # categorical
+            "batch_size":    [16, 32],   # categorical
         },
 
         # Training (fixed)

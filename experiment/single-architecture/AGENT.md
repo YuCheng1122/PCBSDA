@@ -18,7 +18,10 @@
 
 ## 比較方法
 
-FCGAT、IMCFN、MalConv、GEMAL 均為比較的 baseline 論文，各自有獨立實作，透過 `/scripts/single-architecture/` 下的 shell script 執行，跑完自動寄信通知。
+本實驗包含兩類比較對象，各自有獨立實作，透過 `/scripts/single-architecture/` 下的 shell script 執行，跑完自動寄信通知：
+
+- **Baseline 論文**（比較不同模型架構／特徵表示方式）：FCGAT、IMCFN、MalConv、GEMAL，各自使用原論文的特徵與模型設計
+- **我們的方法（P-code embedding 比較）**：同樣以 Pcode opcode 作為輸入特徵，比較不同 embedding model 的效果，包含 Word2Vec（CBOW / Skip-gram / FastText）與 RoBERTa，搭配 GCN / GAT backbone
 
 ## 規則
 
