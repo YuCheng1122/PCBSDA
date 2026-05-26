@@ -1,7 +1,7 @@
 import copy
 import logging
 import os
-
+import sys
 import numpy as np
 import torch
 from torch_geometric.loader import DataLoader as PyGDataLoader
@@ -14,6 +14,7 @@ from src.transfer_learning.dann.utils import (
     plot_training_curves, save_experiment_results,
 )
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 def setup_logger(log_dir, name="dann"):
     os.makedirs(log_dir, exist_ok=True)

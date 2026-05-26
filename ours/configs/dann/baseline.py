@@ -9,7 +9,7 @@ def get_dann_config():
 
         # Domain: source = fully labeled, target = few-shot labeled
         "source_cpus": ["x86_64"],
-        "target_cpus": ["Intel"],
+        "target_cpus": ["ARM-32"],
 
         # Data paths
         "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
@@ -39,7 +39,7 @@ def get_dann_config():
 
         # DANN Training
         # Loss = CE_src + lambda_domain * (domain_src + domain_tgt)
-        "lambda_domain": 0.1,       # domain adversarial loss weight
+        "lambda_domain": 0.3,       # domain adversarial loss weight
         "batch_size": 32,
         "learning_rate": 0.001,
         "epochs": 200,

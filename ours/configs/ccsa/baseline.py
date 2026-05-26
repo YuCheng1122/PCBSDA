@@ -22,7 +22,7 @@ def get_ccsa_config():
 
         # Data split
         "source_val_size": 0.2,         # source: train/val = 80/20
-        "random_states": [42, 123],  # 多次實驗用不同 target sampling
+        "random_states": [42, 123, 456, 789, 1011, 1314, 1617],  # 多次實驗用不同 target sampling
 
         # Few-shot: target domain 使用的 labeled 樣本數量 (per class)
         "num_target_samples_per_class": 5, 
