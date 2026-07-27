@@ -45,6 +45,60 @@ output/
     └── <檔名>.json              # 每個 function 的 entry point、function_name、instructions(address/operation/opcode)
 ```
 
+## 輸出範例
+
+用 BinKit 資料集裡的 ARM 32-bit binary 實測(`a2ps-4.14_clang-4.0_arm_32_O0_a2ps`,~1.3MB):
+
+```bash
+./get_function_call_Pcode.sh \
+  /path/to/ghidra/support/analyzeHeadless \
+  /home/tommy/Projects/data/BinKit_normal/a2ps \
+  ./output \
+  1200
+```
+
+跑完約 161 秒,抽出 1015 個 function。`<檔名>.dot` 內容(function call graph,節點是 entry point,邊是呼叫關係):
+
+```dot
+digraph code {
+  "0x11614" [label="_init"];
+  "0x11614" -> "0x11b14";
+  "0x11ad8" [label="_start"];
+  "0x11b14" [label="call_weak_fn"];
+  "0x11b38" [label="deregister_tm_clones"];
+  "0x11b64" [label="register_tm_clones"];
+  "0x11b9c" [label="__do_global_dtors_aux"];
+  ...
+}
+```
+
+`<檔名>.json` 內容(每個 function 的 opcode 序列,可餵給 embedding 步驟):
+
+```json
+{
+  "0x328dc": {
+    "function_name": "sshget_lineno",
+    "instructions": [
+      {
+        "address": "000328e0",
+        "operation": "(register, 0x20, 4) LOAD (const, 0x1a1, 4) , (ram, 0x328e8, 4)",
+        "opcode": "LOAD"
+      },
+      {
+        "address": "000328e4",
+        "operation": " ---  RETURN (const, 0x0, 4) , (register, 0x20, 4)",
+        "opcode": "RETURN"
+      },
+      {
+        "address": "000328e4",
+        "operation": "(ram, 0x328e8, 4) COPY (ram, 0x328e8, 4)",
+        "opcode": "COPY"
+      }
+    ]
+  }
+}
+```
+
 ## 已測試驗證
 
-用 `/bin/ls`、`/bin/cat` 實測跑通,並確認錯誤情境(非法檔案格式)會正確歸類到 `import_failed_files.txt`。
+用 `/bin/ls`、`/bin/cat`,以及上面的 ARM 32-bit 真實樣本實測跑通,並確認錯誤情境(非法檔案格式)會正確歸類到 `import_failed_files.txt`。
