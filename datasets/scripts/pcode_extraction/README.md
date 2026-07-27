@@ -2,6 +2,8 @@
 
 對應 pipeline 第 1 步:批次用 Ghidra 反編譯二進位檔,抽取每個 function 的 High Pcode opcode 序列與 function call graph(DOT + JSON)。
 
+> **使用前請注意**:這兩個腳本本身沒有任何機器專屬路徑,但需要你自己先裝好下面「需求」列的 Ghidra + Ghidrathon 與 GNU `parallel`,否則跑不起來(Ghidrathon 沒裝會找不到 Python 3 執行環境;`parallel` 沒裝會直接報 command not found)。
+
 ## 檔案
 
 - `get_function_call_Pcode.sh`:批次處理入口,對資料夾內所有檔案平行呼叫 Ghidra headless。
