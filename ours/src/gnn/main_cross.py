@@ -1,3 +1,4 @@
+from pathlib import Path
 """
 main_cross.py
 跨架構交叉實驗：依 configs/gnn/gnn_cross.py 中 arch_experiments 定義的
@@ -246,7 +247,7 @@ def aggregate(all_results, target_cpus):
 # ──────────────────────────────────────────────────────────────
 def run_source(source_arch, arch_info, base_config, logger):
     EMBEDDING = os.path.basename(base_config["graph_dir"])
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     config = copy.deepcopy(base_config)
     config["source_cpus"]     = [source_arch]

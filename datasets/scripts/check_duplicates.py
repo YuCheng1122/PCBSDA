@@ -9,7 +9,7 @@ check_duplicates.py
 用法：
     python check_duplicates.py --gpickle_dir <path> [--output <csv_path>] [--workers <n>]
 
-預設 gpickle_dir: /home/tommy/Project/PCBSDA/ours/outputs/raw_data/gnn/gpickle
+預設 gpickle_dir: <repo>/ours/outputs/raw_data/gnn/gpickle
 """
 
 import argparse
@@ -111,7 +111,7 @@ def main():
     parser.add_argument(
         "--gpickle_dir",
         type=Path,
-        default=Path("/home/tommy/Project/PCBSDA/ours/outputs/raw_data/gnn/gpickle"),
+        default=Path(__file__).resolve().parents[2] / "ours/outputs/raw_data/gnn/gpickle",
         help="gpickle 根目錄",
     )
     parser.add_argument(

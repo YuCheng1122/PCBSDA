@@ -3,9 +3,9 @@
 # Single-Architecture experiments: RoBERTa → Word2Vec → Email
 # ============================================================
 
-GMAIL_APP_PASSWORD=$(cat ~/.gmail_app_password)
+GMAIL_APP_PASSWORD="$(cat ~/.gmail_app_password 2>/dev/null || true)"
 GMAIL_USER="yuchlin00@gmail.com"
-PROJECT_ROOT="/home/tommy/Projects/PCBSDA"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/experiment/outputs/logs"
 
 mkdir -p "$LOG_DIR"
@@ -28,6 +28,10 @@ echo "[$(date '+%H:%M:%S')] Word2Vec done (exit $W2V_EXIT)"
 
 END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$END_TIME] ===== Done ====="
+if [[ -z "$GMAIL_APP_PASSWORD" ]]; then
+    echo "No ~/.gmail_app_password; skipping optional completion email."
+    exit 0
+fi
 
 # --- Email ---
 ROBERTA_EXIT=$ROBERTA_EXIT \
@@ -53,8 +57,8 @@ Word2Vec : {w2v}
 開始：{os.environ['START_TIME']}
 結束：{os.environ['END_TIME']}
 
-結果路徑：/home/tommy/Projects/PCBSDA/experiment/outputs/results/
-Log 路徑：/home/tommy/Projects/PCBSDA/experiment/outputs/logs/
+結果路徑：$PROJECT_ROOT/experiment/outputs/results/
+Log 路徑：$PROJECT_ROOT/experiment/outputs/logs/
 """
 
 msg = MIMEText(body, "plain", "utf-8")

@@ -39,7 +39,7 @@ class EpochLogger(CallbackAny2Vec):
         if self.epoch == self.total:
             print()
 
-BASE_PATH = "/home/tommy/Project/PCBSDA"
+BASE_PATH = str(Path(__file__).resolve().parents[3])
 CORPUS_DIR = f"{BASE_PATH}/experiment/outputs/raw_data/single-architecture/FCGAT/corpus"
 OUTPUT_DIR = f"{BASE_PATH}/experiment/outputs/models/single-architecture/FCGAT/word2vec"
 ALL_ARCHS  = ["Intel", "ARM-32", "x86_64", "MIPS"]

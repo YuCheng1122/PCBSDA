@@ -1,3 +1,4 @@
+from pathlib import Path
 """
 Embed FCGAT graphs using per-architecture Word2Vec CBOW models.
 
@@ -31,7 +32,7 @@ import pandas as pd
 from gensim.models import Word2Vec
 from tqdm import tqdm
 
-BASE_PATH   = "/home/tommy/Project/PCBSDA"
+BASE_PATH   = str(Path(__file__).resolve().parents[3])
 CSV_PATH    = f"{BASE_PATH}/datasets/csv/single_arch_dataset.csv"
 RAW_DIR     = f"{BASE_PATH}/experiment/outputs/raw_data/single-architecture/FCGAT/GNN/gpickle_single"
 MODEL_DIR   = f"{BASE_PATH}/experiment/outputs/models/single-architecture/FCGAT/word2vec"

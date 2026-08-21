@@ -1,9 +1,10 @@
+from pathlib import Path
 def get_w2v_gnn_config(model_name):
     """
     GNN config for w2v-based embeddings (cbow, skipgram, fasttext).
     model_name: 'cbow', 'skipgram', or 'fasttext'
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     config = {
         # Task mode

@@ -1,4 +1,5 @@
-BASE_PATH = "/home/tommy/Projects/PCBSDA"
+from pathlib import Path
+BASE_PATH = str(Path(__file__).resolve().parents[3])
 
 ALL_ARCHS = ["Intel", "ARM-32", "x86_64", "MIPS"]
 

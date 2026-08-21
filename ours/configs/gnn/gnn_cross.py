@@ -1,5 +1,6 @@
+from pathlib import Path
 def get_gnn_cross_config():
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
     EMBEDDING = "roberta_20"  # "cbow", "skipgram", "fast_text", "roberta"
     MODEL = "gat"             # "gcn" or "gat"
 

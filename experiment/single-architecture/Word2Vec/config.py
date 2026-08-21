@@ -1,10 +1,11 @@
+from pathlib import Path
 def get_w2v_single_config(arch="x86_64", w2v_model="cbow"):
     """
     Single-architecture family classification config for Word2Vec-based embeddings.
     arch: one of ["Intel", "ARM-32", "x86_64", "MIPS"]
     w2v_model: "cbow", "skipgram", or "fast_text"
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     arch_tag = arch.replace("-", "_").lower()
 

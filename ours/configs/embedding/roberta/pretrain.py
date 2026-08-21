@@ -1,6 +1,7 @@
+from pathlib import Path
 def get_pretrain_config():
     MAX_LENGTH = 512
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[4])
 
     config = {
         # Model architecture (vocab_size and model_config will be set dynamically)

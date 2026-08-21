@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 import pickle
 import torch
@@ -7,7 +8,7 @@ from tqdm import tqdm
 import json
 
 
-BASE_PATH = "/home/tommy/Project/PCBSDA"
+BASE_PATH = str(Path(__file__).resolve().parents[3])
 MODEL_PATH = f"{BASE_PATH}/ours/outputs/models/embedding/roberta/model_epoch_20"
 RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"
 OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta_20"

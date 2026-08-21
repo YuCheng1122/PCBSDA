@@ -1,5 +1,6 @@
+from pathlib import Path
 def get_ml_run_all_config():
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
     EMBEDDING = "cbow"
 
     config = {

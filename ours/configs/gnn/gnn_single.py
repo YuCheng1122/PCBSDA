@@ -1,9 +1,10 @@
+from pathlib import Path
 def get_gnn_single_config(arch="x86_64"):
     """
     Single-architecture family classification config.
     arch: one of ["Intel", "ARM-32", "x86_64", "MIPS"]
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
     EMBEDDING = "roberta_20"  # "cbow", "skipgram", "fast_text", "roberta"
 
     arch_tag = arch.replace("-", "_").lower()

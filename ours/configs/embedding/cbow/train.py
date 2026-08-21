@@ -1,5 +1,6 @@
+from pathlib import Path
 def get_cbow_config():
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[4])
 
     config = {
         # Data paths

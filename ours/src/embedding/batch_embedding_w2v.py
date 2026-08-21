@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 import pickle
 import numpy as np
@@ -7,7 +8,7 @@ import json
 import argparse
 
 
-BASE_PATH = "/home/tommy/Project/PCBSDA"
+BASE_PATH = str(Path(__file__).resolve().parents[3])
 
 # Input: raw gpickle graphs (no embedding yet)
 RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"

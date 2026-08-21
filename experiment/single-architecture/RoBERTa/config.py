@@ -1,10 +1,11 @@
+from pathlib import Path
 def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
     """
     Single-architecture family classification config for RoBERTa-based embeddings.
     arch: one of ["Intel", "ARM-32", "x86_64", "MIPS"]
     roberta_tag: embedding folder name, e.g. "roberta_20"
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     arch_tag = arch.replace("-", "_").lower()
 

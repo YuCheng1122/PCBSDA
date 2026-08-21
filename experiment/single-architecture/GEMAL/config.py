@@ -1,3 +1,4 @@
+from pathlib import Path
 def get_gemal_single_config(arch: str = "x86_64") -> dict:
     """
     Single-architecture family classification config for GEMAL.
@@ -5,7 +6,7 @@ def get_gemal_single_config(arch: str = "x86_64") -> dict:
 
     Model: GCN + attention readout, graph embedding → 300-d → classifier
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     config = {
         # Task

@@ -1,3 +1,4 @@
+from pathlib import Path
 def get_fcgat_single_config(arch="x86_64"):
     """
     Single-architecture family classification config for FCGAT.
@@ -9,7 +10,7 @@ def get_fcgat_single_config(arch="x86_64"):
     GAT + Set2Set architecture follows Table I:
       GATConv(100→192, K=3), Set2Set(192→384, steps=4), FC(384→N)
     """
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[3])
 
     config = {
         # Task

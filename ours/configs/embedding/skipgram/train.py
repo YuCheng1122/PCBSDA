@@ -1,9 +1,10 @@
+from pathlib import Path
 def get_skipgram_config():
-    BASE_PATH = "/home/tommy/Project/PCBSDA"
+    BASE_PATH = str(Path(__file__).resolve().parents[4])
 
     config = {
         # Data paths
-        "corpus_path": f"{BASE_PATH}/datasets/preprocessed/pcode_corpus_x86_64_new_data.pkl",
+        "corpus_path": f"{BASE_PATH}/ours/outputs/raw_data/embedding/corpus_Advanced Micro Devices x86-64.pkl",
         "output_path": f"{BASE_PATH}/ours/outputs/models/embedding/skipgram/",
 
         # Word2Vec parameters
