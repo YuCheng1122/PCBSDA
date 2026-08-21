@@ -3,7 +3,7 @@ from pathlib import Path
 
 def get_sensitivity_config():
     BASE_PATH = Path(__file__).resolve().parents[3]
-    EMBEDDING = "roberta_20"
+    EMBEDDING = "roberta"
     MODEL = "gat"
 
     config = {

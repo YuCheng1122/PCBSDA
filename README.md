@@ -20,6 +20,7 @@ If the target GPU needs a different CUDA build, replace `torch` and `torchvision
 ## Dataset paths
 
 The CSV files are included in Git and are ready immediately after cloning. The setup script restores downloaded artifacts directly to the paths used by every config; no files need to be moved manually.
+The pretrained bundle includes the RoBERTa epoch checkpoints, tokenizer files, and 33,312 embedded graphs restored as `ours/outputs/embedded_graphs/roberta`.
 
 | CSV | Purpose |
 |---|---|
@@ -38,13 +39,13 @@ Run commands from the repository root after activating `.venv`. Each single-arch
 | IMCFN | `python experiment/single-architecture/IMCFN/run.py` | `experiment/outputs/raw_data/single_architecture/IMCFN/results_image` | `experiment/outputs/results/single_architecture/IMCFN` |
 | FCGAT | `python experiment/single-architecture/FCGAT/run.py` | `experiment/outputs/embedded_graphs/single-architecture/FCGAT` | `experiment/outputs/results/fcgat` |
 | GEMAL | `python experiment/single-architecture/GEMAL/run.py` | FCGAT embedded graphs | `experiment/outputs/results/gemal` |
-| RoBERTa | `python experiment/single-architecture/RoBERTa/run.py --roberta-tag roberta_20` | `ours/outputs/embedded_graphs/roberta_20` | `experiment/outputs/results/roberta` |
+| RoBERTa | `python experiment/single-architecture/RoBERTa/run.py --roberta-tag roberta` | `ours/outputs/embedded_graphs/roberta` | `experiment/outputs/results/roberta` |
 | Word2Vec | `python experiment/single-architecture/Word2Vec/run.py --w2v-model cbow` | `ours/outputs/embedded_graphs/cbow` | `experiment/outputs/results/word2vec` |
 | Uni-MAP | See the two commands below | Uni-MAP sequences and mapped vectors | `experiment/outputs/results/cross-architecture/unimap` |
-| GNN / PCBSDA | `python -m src.gnn.main_cross` | `ours/outputs/embedded_graphs/roberta_20` | `ours/outputs/results/gnn` |
+| GNN / PCBSDA | `python -m src.gnn.main_cross` | `ours/outputs/embedded_graphs/roberta` | `ours/outputs/results/gnn` |
 | ML baseline | `python -m src.ml.main` | `ours/outputs/embedded_graphs/cbow` | `ours/outputs/results/ml` |
-| DANN | `python -m src.transfer_learning.dann.main` | `ours/outputs/embedded_graphs/roberta_20` | `ours/outputs/results/dann` |
-| CCSA | `python -m src.transfer_learning.ccsa.main` | `ours/outputs/embedded_graphs/roberta_20` | `ours/outputs/results/ccsa` |
+| DANN | `python -m src.transfer_learning.dann.main` | `ours/outputs/embedded_graphs/roberta` | `ours/outputs/results/dann` |
+| CCSA | `python -m src.transfer_learning.ccsa.main` | `ours/outputs/embedded_graphs/roberta` | `ours/outputs/results/ccsa` |
 | d-SNE | `python -m src.transfer_learning.dsne.main` | `ours/outputs/embedded_graphs/cbow` | `ours/outputs/results/dsne` |
 
 Run a Uni-MAP cross-architecture experiment:

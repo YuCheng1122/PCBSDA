@@ -72,13 +72,21 @@ do
     tar -I zstd -xf "$archive" -C "$PROJECT_ROOT"
 done
 
+# The archived graph folder used an older experiment suffix. Normalize the
+# restored path so all configs and handoff commands use the stable name.
+old_roberta_graphs="$PROJECT_ROOT/ours/outputs/embedded_graphs/roberta_20"
+new_roberta_graphs="$PROJECT_ROOT/ours/outputs/embedded_graphs/roberta"
+if [[ -d "$old_roberta_graphs" && ! -e "$new_roberta_graphs" ]]; then
+    mv "$old_roberta_graphs" "$new_roberta_graphs"
+fi
+
 required_paths=(
     "datasets/csv/single_arch_dataset.csv"
     "datasets/csv/cross_architecture_dataset_family8.csv"
     "ours/outputs/raw_data/gnn/gpickle"
     "ours/outputs/raw_data/embedding"
     "ours/outputs/embedded_graphs/cbow"
-    "ours/outputs/embedded_graphs/roberta_20"
+    "ours/outputs/embedded_graphs/roberta"
     "experiment/outputs/raw_data/single_architecture/MalConv/results_raw_byte"
     "experiment/outputs/raw_data/single_architecture/IMCFN/results_image"
     "experiment/outputs/embedded_graphs/single-architecture/FCGAT"

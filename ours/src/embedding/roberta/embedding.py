@@ -9,9 +9,9 @@ import json
 
 
 BASE_PATH = str(Path(__file__).resolve().parents[3])
-MODEL_PATH = f"{BASE_PATH}/ours/outputs/models/embedding/roberta/model_epoch_20"
+MODEL_PATH = f"{BASE_PATH}/ours/outputs/checkpoints/embedding/roberta/model_epoch_20"
 RAW_GRAPH_DIR = f"{BASE_PATH}/ours/outputs/raw_data/gnn/gpickle"
-OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta_20"
+OUTPUT_DIR = f"{BASE_PATH}/ours/outputs/embedded_graphs/roberta"
 
 
 def load_pretrained_model(model_path=MODEL_PATH):

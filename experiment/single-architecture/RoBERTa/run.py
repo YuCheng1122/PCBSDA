@@ -354,7 +354,7 @@ def main():
     )
     parser.add_argument("--arch", type=str, default=None,
                         help=f"Target arch. If omitted, runs all: {ALL_ARCHS}")
-    parser.add_argument("--roberta-tag", type=str, default="roberta_20", choices=ROBERTA_TAGS,
+    parser.add_argument("--roberta-tag", type=str, default="roberta", choices=ROBERTA_TAGS,
                         help="RoBERTa embedding folder tag")
     parser.add_argument("--n-trials", type=int, default=None,
                         help="Override number of Optuna trials")

@@ -5,7 +5,7 @@ def get_gnn_single_config(arch="x86_64"):
     arch: one of ["Intel", "ARM-32", "x86_64", "MIPS"]
     """
     BASE_PATH = str(Path(__file__).resolve().parents[3])
-    EMBEDDING = "roberta_20"  # "cbow", "skipgram", "fast_text", "roberta"
+    EMBEDDING = "roberta"  # "cbow", "skipgram", "fast_text", "roberta"
 
     arch_tag = arch.replace("-", "_").lower()
 

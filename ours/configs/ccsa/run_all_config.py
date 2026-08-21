@@ -1,7 +1,7 @@
 from pathlib import Path
 def get_run_all_config():
     BASE_PATH = str(Path(__file__).resolve().parents[3])
-    EMBEDDING = "roberta_20"
+    EMBEDDING = "roberta"
     MODEL = "gat"
 
     config = {

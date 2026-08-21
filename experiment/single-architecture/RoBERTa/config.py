@@ -1,9 +1,9 @@
 from pathlib import Path
-def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
+def get_roberta_single_config(arch="x86_64", roberta_tag="roberta"):
     """
     Single-architecture family classification config for RoBERTa-based embeddings.
     arch: one of ["Intel", "ARM-32", "x86_64", "MIPS"]
-    roberta_tag: embedding folder name, e.g. "roberta_20"
+    roberta_tag: embedding folder name, e.g. "roberta"
     """
     BASE_PATH = str(Path(__file__).resolve().parents[3])
 
@@ -33,7 +33,7 @@ def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
         "pooling": "attention",
         "gat_heads": 4,
         "scheduler_type": "step",
-        "num_node_features": 256,   # roberta_20 output dim
+        "num_node_features": 256,   # roberta output dim
         "num_classes": None,
         "hidden_channels": 256,
         "output_channels": 256,
@@ -75,4 +75,4 @@ def get_roberta_single_config(arch="x86_64", roberta_tag="roberta_20"):
 
 
 ALL_ARCHS = ["Intel", "ARM-32", "x86_64", "MIPS"]
-ROBERTA_TAGS = ["roberta_20"]
+ROBERTA_TAGS = ["roberta"]
