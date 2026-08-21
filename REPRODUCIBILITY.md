@@ -11,13 +11,13 @@ This repository contains the code and configuration needed to reproduce the PCBS
 
 ## Data
 
-Download `islab/PST2026/gpickle.tar.gz`. It contains the reverse-engineered and preprocessed raw graphs, so reproducing the Ghidra extraction step is optional.
+Download `islab/PST2026/dataset/gpickle-preprocessed-raw-data.tar.gz`. It contains the reverse-engineered and preprocessed raw graphs, so reproducing the Ghidra extraction step is optional.
 
 ```bash
-tar -xzf gpickle.tar.gz
+tar -xzf gpickle-preprocessed-raw-data.tar.gz
 ```
 
-Additional archives and their SHA-256 checksums are listed in `islab/PST2026/artifacts/manifests/` and in `ARTIFACTS.md`.
+Experiment archives are grouped by model under `islab/PST2026/experiment/`; checksums are under `islab/PST2026/manifests/` and in `ARTIFACTS.md`.
 
 ## Environment
 

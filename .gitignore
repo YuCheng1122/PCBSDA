@@ -11,6 +11,7 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 .local-tools/
+.venv/
 data/processed/
 results/
 outputs/

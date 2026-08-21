@@ -32,7 +32,7 @@ These jobs are long-running. Their entry points, imports, configuration loading,
 
 ## Data and artifacts
 
-- Preprocessed graph input: `islab/PST2026/gpickle.tar.gz`
+- Preprocessed graph input: `islab/PST2026/dataset/gpickle-preprocessed-raw-data.tar.gz`
 - MD5: `5a4059bb403401106a597fc62faec86b`
 - Server `.41` is authoritative for Uni-MAP.
 - Server `.40` supplies earlier experiment and pretraining artifacts.
