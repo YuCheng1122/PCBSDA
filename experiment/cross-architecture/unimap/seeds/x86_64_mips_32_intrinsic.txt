@@ -1,0 +1,40 @@
+# Category: Control Transfer
+CALL~<FOO>	JAL~<FOO>	1.0
+CALL~<FOO>	BAL~<FOO>	1.0
+RET	JR~R31	1.0
+# Category: Conditional Branch
+JZ~<FOO>	BEQ~R2,R0,<FOO>	1.0
+JNZ~<FOO>	BNE~R2,R0,<FOO>	1.0
+JG~<FOO>	BGTZ~R2,<FOO>	1.0
+# Category: Data Transfer (Load)
+MOV~RAX,QWORD~PTR~[RBP+-0]	LW~R2,<OFF>R30	1.0
+MOV~EAX,DWORD~PTR~[RBP+-0]	LW~R2,<OFF>R30	1.0
+MOV~RAX,QWORD~PTR~[RSP+0]	LW~R2,<OFF>R29	1.0
+# Category: Data Transfer (Store)
+MOV~QWORD~PTR~[RBP+-0],RAX	SW~R2,<OFF>R30	1.0
+MOV~DWORD~PTR~[RBP+-0],EAX	SW~R2,<OFF>R30	1.0
+MOV~QWORD~PTR~[RSP+0],RAX	SW~R2,<OFF>R29	1.0
+# Category: Data Transfer (Move Immediate)
+MOV~EAX,0	LI~R2,0	1.0
+MOV~ESI,0	LI~R6,0	1.0
+MOV~EDX,0	LI~R3,0	1.0
+# Category: Data Transfer (Register Copy)
+MOV~RDI,RAX	OR~R4,R2,R0	1.0
+MOV~RSI,RAX	OR~R5,R2,R0	1.0
+MOV~RDX,RAX	OR~R6,R2,R0	1.0
+# Category: Data Transfer (Zero Register)
+XOR~EAX,EAX	OR~R2,R0,R0	1.0
+XOR~EDI,EDI	OR~R4,R0,R0	1.0
+XOR~EDX,EDX	OR~R3,R0,R0	1.0
+# Category: Data Transfer (Stack Save/Restore)
+PUSH~RBP	SW~R30,<OFF>R29	1.0
+POP~RBP	LW~R30,<OFF>R29	1.0
+PUSH~RBX	SW~R16,<OFF>R29	1.0
+# Category: Arithmetic (Stack Adjust)
+SUB~RSP,0	ADD~R29,R29,-0	1.0
+ADD~RSP,0	ADD~R29,R29,0	1.0
+MOV~RBP,RSP	OR~R30,R29,R0	1.0
+# Category: Arithmetic (General)
+ADD~RAX,RDX	ADD~R2,R2,R3	1.0
+ADD~RAX,0	ADD~R2,R2,0	1.0
+CMP~EAX,0	SLT~R2,R2,0	1.0

@@ -10,9 +10,12 @@ __pycache__/
 .idea/
 .DS_Store
 .ipynb_checkpoints/
+.local-tools/
 data/processed/
 results/
 outputs/
 *tar.gz
+*.tar.zst
+*.sha256
 *.png
 *.json

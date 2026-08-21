@@ -1,0 +1,17 @@
+# Install a CUDA-compatible PyTorch build separately when GPU support is needed.
+torch==2.8.0
+torchvision==0.23.0
+torch-geometric==2.6.1
+numpy==2.3.3
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.16.2
+gensim==4.4.0
+networkx==3.5
+optuna==4.8.0
+matplotlib==3.10.6
+seaborn==0.13.2
+tqdm==4.67.1
+pillow==11.3.0
+joblib==1.5.2
+fasttext==0.9.3
