@@ -36,7 +36,7 @@ Run commands from the repository root after activating `.venv`. Each single-arch
 | CCSA | `python -m src.transfer_learning.ccsa.main` | `ours/outputs/embedded_graphs/roberta_20` | `ours/outputs/results/ccsa` |
 | d-SNE | `python -m src.transfer_learning.dsne.main` | `ours/outputs/embedded_graphs/cbow` | `ours/outputs/results/dsne` |
 
-Uni-MAP uses the server `.41` version as authoritative:
+Run a Uni-MAP cross-architecture experiment:
 
 ```bash
 python experiment/cross-architecture/unimap/embedSequences.py --mode cross --pair x86_64,ARM-32
@@ -76,7 +76,7 @@ PST2026/
 └── manifests/
 ```
 
-The raw `gpickle` dataset is already reverse-engineered and preprocessed, so Ghidra is not required for these experiments. Server `.40` contains early experiments and pretraining artifacts; server `.41` is the source of truth for Uni-MAP.
+The raw `gpickle` dataset is already reverse-engineered and preprocessed, so Ghidra is not required for these experiments.
 
 ## Validation
 
