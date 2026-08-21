@@ -9,7 +9,7 @@ Requirements: Ubuntu/Linux, Python 3.12, about 250 GB free disk space, and `zstd
 ```bash
 git clone https://github.com/YuCheng1122/PCBSDA.git
 cd PCBSDA
-bash scripts/setup.sh 'https://drive.google.com/drive/folders/14n-fKv-TNy3M9LahkET5IMVcDRt-Gdbk?usp=sharing'
+bash scripts/setup.sh 'PST2026_GOOGLE_DRIVE_FOLDER_URL'
 source .venv/bin/activate
 ```
 
