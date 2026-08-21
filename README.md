@@ -17,6 +17,17 @@ The setup script does the complete handoff setup: it creates `.venv`, installs a
 
 If the target GPU needs a different CUDA build, replace `torch` and `torchvision` in the virtual environment with the matching packages from PyTorch.
 
+## Dataset paths
+
+The CSV files are included in Git and are ready immediately after cloning. The setup script restores downloaded artifacts directly to the paths used by every config; no files need to be moved manually.
+
+| CSV | Purpose |
+|---|---|
+| `datasets/csv/single_arch_dataset.csv` | MalConv, IMCFN, FCGAT, GEMAL, RoBERTa, Word2Vec, and single-architecture GNN |
+| `datasets/csv/cross_architecture_dataset_family8.csv` | Uni-MAP, cross-architecture GNN, ML baseline, DANN, CCSA, and d-SNE family classification |
+| `datasets/csv/merged_adjusted_filtered.csv` | Earlier cross-architecture malware-detection experiments |
+| `datasets/csv/cross_architecture_dataset.csv` and `cross_architecture_dataset_clean.csv` | Original and cleaned metadata used to prepare the experiment CSV files |
+
 ## Reproduce experiments
 
 Run commands from the repository root after activating `.venv`. Each single-architecture command runs all four architectures when `--arch` is omitted. Evaluation is performed inside the training run by nested cross-validation; these programs do not have a separate checkpoint-only test command.

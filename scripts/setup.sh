@@ -72,5 +72,25 @@ do
     tar -I zstd -xf "$archive" -C "$PROJECT_ROOT"
 done
 
+required_paths=(
+    "datasets/csv/single_arch_dataset.csv"
+    "datasets/csv/cross_architecture_dataset_family8.csv"
+    "ours/outputs/raw_data/gnn/gpickle"
+    "ours/outputs/raw_data/embedding"
+    "ours/outputs/embedded_graphs/cbow"
+    "ours/outputs/embedded_graphs/roberta_20"
+    "experiment/outputs/raw_data/single_architecture/MalConv/results_raw_byte"
+    "experiment/outputs/raw_data/single_architecture/IMCFN/results_image"
+    "experiment/outputs/embedded_graphs/single-architecture/FCGAT"
+    "experiment/outputs/raw_data/cross-architecture/unimap/sequences"
+    "experiment/cross-architecture/unimap/embeddings"
+)
+for relative_path in "${required_paths[@]}"; do
+    [[ -e "$PROJECT_ROOT/$relative_path" ]] || {
+        echo "Restore validation failed: $relative_path" >&2
+        exit 1
+    }
+done
+
 echo "Activate with: source '$VENV_DIR/bin/activate'"
 echo "Data restored. See README.md for experiment entry points."

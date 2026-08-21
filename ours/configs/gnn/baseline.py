@@ -12,7 +12,7 @@ def get_gnn_config():
         # "MIPS", "Intel", "PPC"
 
         # Data paths
-        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8_x86.csv",
+        "csv_path": f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
         "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
         "cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn.pkl",
         "test_cache_file": f"{BASE_PATH}/ours/outputs/cache/gnn/{EMBEDDING}/gnn_test.pkl",

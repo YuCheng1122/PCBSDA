@@ -17,7 +17,7 @@ def get_gnn_cross_config():
         },
 
         # Data paths (all experiments share the same CSV)
-        "csv_path":  f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8_x86.csv",
+        "csv_path":  f"{BASE_PATH}/datasets/csv/cross_architecture_dataset_family8.csv",
         "graph_dir": f"{BASE_PATH}/ours/outputs/embedded_graphs/{EMBEDDING}",
 
         # Data split
